@@ -651,13 +651,33 @@ function openPlanSheet() {
 const wrap = $('#sheetWrap'), sheet = $('#sheet');
 let ctx = null;   // { mode, type, id, seed, color }
 
+/* Locking with `overflow: hidden` alone collapses the scrollable area and the
+   browser clamps the offset, so the page behind jumps. Pin the body instead
+   and put the offset back on close. */
+let lockedAt = 0;
+
+function lockPage() {
+  lockedAt = window.scrollY || 0;
+  document.body.style.top = `-${lockedAt}px`;
+  document.body.classList.add('is-locked');
+}
+
+function unlockPage() {
+  if (!document.body.classList.contains('is-locked')) return;
+  document.body.classList.remove('is-locked');
+  document.body.style.top = '';
+  window.scrollTo(0, lockedAt);
+}
+
 function openSheet(html, context) {
   ctx = context || null;
   sheet.innerHTML = `<div class="grabber"></div>${html}`;
   wrap.hidden = false;
-  document.body.classList.add('is-locked');
+  lockPage();
   sheet.scrollTop = 0;
-  if (ctx?.autofocus !== false) sheet.querySelector('[data-autofocus]')?.focus();
+  // preventScroll: focusing a field inside the overlay would otherwise scroll
+  // the page behind it, so the list you came from jumps while you type.
+  if (ctx?.autofocus !== false) sheet.querySelector('[data-autofocus]')?.focus({ preventScroll: true });
   fitSheet();
 }
 
@@ -666,7 +686,7 @@ function closeSheet() {
   sheet.innerHTML = '';
   sheet.style.bottom = sheet.style.maxHeight = '';
   ctx = null;
-  document.body.classList.remove('is-locked');
+  unlockPage();
 }
 
 /* Keep the sheet above the iOS keyboard. */
@@ -882,7 +902,7 @@ function flash(sel) {
   const el = sheet.querySelector(sel);
   if (!el) return;
   el.classList.add('is-bad');
-  el.focus();
+  el.focus({ preventScroll: true });
 }
 
 function removeItem() {
