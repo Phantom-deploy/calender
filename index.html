@@ -5,13 +5,12 @@
 <title>Planner</title>
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <meta name="description" content="A minimal personal calendar and school planner.">
-<meta name="color-scheme" content="light dark">
-<meta name="theme-color" content="#ffffff">
+<meta name="theme-color" content="#f6f7f9" id="themeColor">
 
 <link rel="manifest" href="manifest.webmanifest">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="mobile-web-app-capable" content="yes">
-<meta name="apple-mobile-web-app-status-bar-style" content="default">
+<meta name="apple-mobile-web-app-status-bar-style" content="default" id="statusBar">
 <meta name="apple-mobile-web-app-title" content="Planner">
 <link rel="apple-touch-icon" href="icons/icon-180.png">
 <link rel="icon" href="icons/icon-192.png" sizes="192x192">
@@ -19,10 +18,14 @@
 
 <link rel="stylesheet" href="app.css">
 <script>
-  // Applied before first paint to avoid a theme flash.
+  /* Runs while the head is still parsing: the theme is in place before the
+     first paint, and iOS reads the status-bar style for the dark theme before
+     it paints its own (light) bar over a dark app. */
   try {
-    var t = localStorage.getItem('planner.theme') || 'light';
+    var t = localStorage.getItem('planner.theme') === 'dark' ? 'dark' : 'light';
     document.documentElement.dataset.theme = t;
+    document.getElementById('themeColor').content = t === 'dark' ? '#000000' : '#f6f7f9';
+    document.getElementById('statusBar').content = t === 'dark' ? 'black' : 'default';
   } catch (e) {}
 </script>
 </head>

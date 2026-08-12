@@ -142,7 +142,20 @@ function renderCalendar() {
       <span class="dnum">${d.getDate()}</span><span class="dots">${dots}</span></button>`;
   }
   $('#grid').innerHTML = html;
-  $('#agenda').innerHTML = agendaHTML();
+  renderAgenda();
+}
+
+function renderAgenda(animate) {
+  const el = $('#agenda');
+  el.innerHTML = agendaHTML();
+  if (animate) replay(el, 'anim-soft');
+}
+
+/** Restart an entrance animation on an element that is already on screen. */
+function replay(el, cls) {
+  el.classList.remove('anim-view', 'anim-soft', 'anim-left', 'anim-right');
+  void el.offsetWidth;
+  el.classList.add(cls);
 }
 
 function agendaHTML() {
@@ -542,20 +555,33 @@ document.addEventListener('click', e => {
   if (!el) return;
 
   switch (el.dataset.act) {
-    case 'pick':
+    /* selection moves in place so the day pill can animate */
+    case 'pick': {
+      if (el.dataset.date === state.selected) break;
       state.selected = el.dataset.date;
-      renderCalendar();
+      for (const d of grid.querySelectorAll('.day.is-selected')) {
+        d.classList.remove('is-selected');
+        d.removeAttribute('aria-current');
+      }
+      el.classList.add('is-selected');
+      el.setAttribute('aria-current', 'date');
+      renderAgenda(true);
       break;
+    }
 
     case 'toggle': {
       const h = byId(db.homework, el.dataset.id);
-      if (h) { h.done = !h.done; save(); render(); }
+      if (!h) break;
+      h.done = !h.done;
+      save();
+      render();
+      if (h.done) document.querySelector(`.check[data-id="${h.id}"]`)?.classList.add('pop');
       break;
     }
 
     case 'open': openEdit(el.dataset.kind, el.dataset.id); break;
-    case 'class': state.classId = el.dataset.id; render(); scrollTo(0, 0); break;
-    case 'back': state.classId = null; render(); break;
+    case 'class': state.classId = el.dataset.id; render(); scrollTo(0, 0); showView(); break;
+    case 'back': state.classId = null; render(); showView(); break;
     case 'new-class': openClassSheet(null); break;
     case 'edit-class': openClassSheet(el.dataset.id); break;
 
@@ -596,12 +622,18 @@ $('#fab').addEventListener('click', () => openAdd({
   classId: state.classId || undefined
 }));
 
+/** Show the active view with a soft entrance. */
+function showView() {
+  replay($(`#view-${state.tab}`), 'anim-view');
+}
+
 function moveMonth(n) {
   const d = new Date(state.year, state.month + n, 1);
   state.month = d.getMonth();
   state.year = d.getFullYear();
   $('#title').textContent = `${MONTHS[state.month]} ${state.year}`;
   renderCalendar();
+  replay(grid, n > 0 ? 'anim-right' : 'anim-left');
 }
 
 $('#prevMonth').addEventListener('click', () => moveMonth(-1));
@@ -615,6 +647,7 @@ $('#title').addEventListener('click', () => {
   state.year = now.getFullYear();
   state.selected = today();
   render();
+  showView();
 });
 
 for (const t of document.querySelectorAll('.tab')) {
@@ -623,6 +656,7 @@ for (const t of document.querySelectorAll('.tab')) {
     state.tab = t.dataset.tab;
     render();
     scrollTo(0, 0);
+    showView();
   });
 }
 
@@ -642,10 +676,13 @@ grid.addEventListener('touchend', e => {
 }, { passive: true });
 
 /* theme */
-const themeMeta = document.querySelector('meta[name="theme-color"]');
+const themeMeta = $('#themeColor');
+const barMeta = $('#statusBar');
 function setTheme(t) {
   document.documentElement.dataset.theme = t;
-  themeMeta.content = t === 'dark' ? '#101114' : '#ffffff';
+  themeMeta.content = t === 'dark' ? '#000000' : '#f6f7f9';
+  // iOS reads this at launch: dark gets a black status bar instead of a white one.
+  barMeta.content = t === 'dark' ? 'black' : 'default';
   try { localStorage.setItem('planner.theme', t); } catch {}
 }
 let storedTheme = null;
@@ -668,6 +705,7 @@ addEventListener('visibilitychange', () => {
 });
 
 render();
+showView();
 
 if ('serviceWorker' in navigator && location.protocol.startsWith('http')) {
   addEventListener('load', () => navigator.serviceWorker.register('sw.js').catch(() => {}));

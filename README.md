@@ -26,7 +26,7 @@ Screen**. It then launches standalone, without Safari's chrome, and works offlin
 | File | Purpose |
 | --- | --- |
 | `index.html` | Static shell: top bar, three views, tab bar, sheet container |
-| `app.css` | All styling; light/dark via `[data-theme]` custom properties |
+| `app.css` | All styling; light/dark via `[data-theme]` custom properties. Type is `ui-rounded` (SF Pro Rounded on iOS), a system font, so nothing downloads |
 | `app.js` | State, storage, rendering, and event handling |
 | `sw.js` | Offline cache of the app shell |
 | `manifest.webmanifest` | PWA metadata |
@@ -45,6 +45,16 @@ Screen**. It then launches standalone, without Safari's chrome, and works offlin
   while adding homework or a note.
 - **Deleting a class** also deletes its homework and notes (it asks first).
 - **Theme** follows the button in the top right and is remembered.
+- **The iOS status bar follows the theme.** iOS decides the status bar's colour
+  from `apple-mobile-web-app-status-bar-style` when the app launches, and it
+  ignores CSS — so the inline script in `index.html` sets that meta (and
+  `theme-color`) from the stored theme while the `<head>` is still parsing:
+  `black` for dark, `default` for light. The dark theme's background is pure
+  black so the two meet seamlessly. Toggling the theme updates the metas
+  immediately; the status bar itself catches up on the next launch.
+- **Launch splash**: iOS builds it from `background_color` in the manifest,
+  which is set to black. Switch it (and `theme_color`) to `#f6f7f9` if you
+  decide to live in light mode.
 
 ## Data
 
