@@ -38,7 +38,7 @@ function persist() {
 /** A local edit: store it and send it to the other devices. */
 function save() {
   persist();
-  sync.dirty = true;
+  markDirty();
   scheduleSync();
 }
 
@@ -593,6 +593,7 @@ function loadSync() {
       sync.url = s.url || SYNC_URL;
       sync.rev = s.rev | 0;
       sync.at = s.at | 0;
+      sync.dirty = !!s.dirty;      // edits that never made it out last time
       sync.status = 'idle';
     }
   } catch {}
@@ -601,9 +602,17 @@ function loadSync() {
 function saveSync() {
   try {
     localStorage.setItem(SYNC_KEY, sync.code
-      ? JSON.stringify({ code: sync.code, url: sync.url, rev: sync.rev, at: sync.at })
+      ? JSON.stringify({ code: sync.code, url: sync.url, rev: sync.rev, at: sync.at, dirty: sync.dirty })
       : '');
   } catch {}
+}
+
+/* Remembered across launches: an edit made offline still gets sent even if
+   the app is closed before it can reach the server. */
+function markDirty() {
+  if (!sync.code || sync.dirty) return;
+  sync.dirty = true;
+  saveSync();
 }
 
 const enc = new TextEncoder();
