@@ -187,7 +187,7 @@ svg {
 /* ---------- Layout ---------- */
 main {
   /* bottom padding keeps the last row clear of the floating + button */
-  padding: 2px calc(var(--pad) + var(--safe-left)) 84px calc(var(--pad) + var(--safe-right));
+  padding: 2px calc(var(--pad) + var(--safe-left)) 96px calc(var(--pad) + var(--safe-right));
   max-width: 620px;
   margin: 0 auto;
 }
@@ -855,13 +855,18 @@ main {
 
 .block-time {
   flex: none;
-  width: 70px;
+  display: flex;
+  flex-direction: column;
+  width: 72px;
   white-space: nowrap;
   font-size: 12.5px;
-  font-weight: 600;
+  line-height: 1.35;
   color: var(--muted);
   font-variant-numeric: tabular-nums;
 }
+
+.block-time b { font-weight: 650; color: var(--text); }
+.block.is-past .block-time b { color: var(--muted); }
 
 .block.is-now { background: var(--accent-soft); }
 .block.is-now .block-time,
@@ -871,3 +876,106 @@ main {
 
 .tick-on { color: var(--accent); display: grid; place-items: center; }
 .tick-on svg { width: 19px; height: 19px; stroke-width: 2.6; }
+
+/* ---------- Panels: a soft box per section ---------- */
+.panel {
+  margin-top: 18px;
+  background: var(--surface);
+  border-radius: var(--r-card);
+  box-shadow: var(--shadow-card);
+  overflow: hidden;
+}
+
+.panel-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 14px 16px 8px;
+}
+
+.panel-head h2 {
+  margin: 0;
+  font-size: 12.5px;
+  font-weight: 650;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+
+.panel .row:first-of-type::before { display: none; }
+.panel .empty { padding: 4px 16px 16px; font-size: 14.5px; }
+
+/* ---------- Home ---------- */
+.hero-link {
+  display: block;
+  width: 100%;
+  text-align: inherit;
+  transition: transform .2s var(--ease);
+}
+
+.hero-link:active { transform: scale(.99); }
+.hero-link .hero { margin-top: 14px; }
+
+.hero-meta {
+  margin-top: 6px;
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--accent);
+}
+
+.quick { margin-top: 16px; }
+.quick .btn { margin-top: 0; }
+
+.chips {
+  display: flex;
+  gap: 8px;
+  margin-top: 10px;
+}
+
+.chip {
+  flex: 1;
+  min-height: 42px;
+  border-radius: 999px;
+  background: var(--surface);
+  box-shadow: var(--shadow-card);
+  color: var(--text);
+  font-size: 14.5px;
+  font-weight: 550;
+  transition: transform .18s var(--ease), background-color .18s ease;
+}
+
+.chip:active { transform: scale(.96); background: var(--surface-2); }
+
+/* ---------- Raised Home button in the tab bar ---------- */
+.tabbar { overflow: visible; }
+
+.tab-home {
+  gap: 2px;
+  justify-content: flex-start;
+  padding-top: 6px;
+}
+
+.home-orb {
+  display: grid;
+  place-items: center;
+  width: 54px;
+  height: 54px;
+  margin-top: -26px;
+  border-radius: 50%;
+  background: var(--accent);
+  color: var(--on-accent);
+  box-shadow: var(--shadow-fab);
+  transition: transform .2s var(--ease);
+}
+
+.home-orb svg { width: 25px; height: 25px; stroke-width: 2; }
+.tab-home:active .home-orb { transform: scale(.92); }
+.tab-home.is-active .home-orb { transform: translateY(-2px); }
+
+/* two fields side by side (room + teacher) */
+.field-row {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px;
+}

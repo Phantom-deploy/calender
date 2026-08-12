@@ -60,6 +60,9 @@
     <div id="agenda"></div>
   </section>
 
+  <!-- Home -->
+  <section class="view" id="view-home" hidden></section>
+
   <!-- Schedule -->
   <section class="view" id="view-schedule" hidden></section>
 
@@ -70,10 +73,6 @@
   <section class="view" id="view-projects" hidden></section>
 </main>
 
-<button class="fab" id="fab" type="button" aria-label="Add">
-  <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg>
-</button>
-
 <nav class="tabbar" id="tabbar">
   <button class="tab is-active" data-tab="calendar" type="button">
     <svg viewBox="0 0 24 24" aria-hidden="true"><rect x="3.2" y="4.8" width="17.6" height="15.4" rx="3"/><path d="M3.2 9.6h17.6M8 3.2v3.2M16 3.2v3.2"/></svg>
@@ -82,6 +81,10 @@
   <button class="tab" data-tab="schedule" type="button">
     <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="8.6"/><path d="M12 7.2V12l3.2 2"/></svg>
     <span>Schedule</span>
+  </button>
+  <button class="tab tab-home" data-tab="home" type="button">
+    <span class="home-orb"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3.6 10.4 12 3.8l8.4 6.6"/><path d="M5.6 11.9v7.3a1 1 0 0 0 1 1h10.8a1 1 0 0 0 1-1v-7.3"/></svg></span>
+    <span>Home</span>
   </button>
   <button class="tab" data-tab="classes" type="button">
     <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 18.2A2.3 2.3 0 016.3 16H20"/><path d="M6.3 3H20v18H6.3A2.3 2.3 0 014 18.7V5.3A2.3 2.3 0 016.3 3z"/></svg>

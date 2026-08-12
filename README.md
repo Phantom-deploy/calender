@@ -25,7 +25,7 @@ Screen**. It then launches standalone, without Safari's chrome, and works offlin
 
 | File | Purpose |
 | --- | --- |
-| `index.html` | Static shell: top bar, three views, tab bar, sheet container |
+| `index.html` | Static shell: top bar, five views, tab bar, sheet container |
 | `app.css` | All styling; light/dark via `[data-theme]` custom properties. Type is `ui-rounded` (SF Pro Rounded on iOS), a system font, so nothing downloads |
 | `app.js` | State, storage, rendering, and event handling |
 | `sw.js` | Offline cache of the app shell |
@@ -58,6 +58,14 @@ Screen**. It then launches standalone, without Safari's chrome, and works offlin
   which is set to black. Switch it (and `theme_color`) to `#f6f7f9` if you
   decide to live in light mode.
 
+## Home
+
+The centre of the tab bar is a raised Home button — the hub the app opens on.
+It shows the period you're in with the time left (tap it to jump to the full
+schedule), a big **Add homework** button with quick chips for a note, project or
+date, then two lists: **Do tonight** (due tomorrow) and **Still due** (due today
+or already late).
+
 ## Schedule
 
 The Schedule tab shows today's bell schedule with a live countdown for the
@@ -66,8 +74,9 @@ period you're in — big at the top, with the class name you assigned rather tha
 dimmed.
 
 Assign your classes once under **My periods** (tap a period, pick a class — you
-can create one right there). Periods 1–5 are the same every day, so the app
-maps them onto whichever bell schedule the day happens to use.
+can create one right there, and optionally add a room and teacher). Periods 1–5
+are the same every day, so the app maps them onto whichever bell schedule the
+day happens to use.
 
 `bell.js` holds the schedules, transcribed from *DEL NORTE HIGH SCHOOL — Bell
 Schedules (Printer Friendly)* (the PDF is in the repo). It knows the regular

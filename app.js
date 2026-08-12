@@ -83,7 +83,11 @@ const $ = sel => document.querySelector(sel);
 const esc = s => String(s ?? '').replace(/[&<>"']/g, c =>
   ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 
-const COLORS = ['#2f6fed', '#e2694b', '#2fa86b', '#a25ddc', '#d9a01e', '#e0559a', '#3aa8c1', '#7a828e'];
+const COLORS = [
+  '#2f6fed', '#4c8dff', '#12a594', '#3aa8c1', '#2fa86b', '#6fa83c',
+  '#d9a01e', '#e8863c', '#e2694b', '#d94f5c', '#e0559a', '#c2569e',
+  '#a25ddc', '#7a5af8', '#5b6bd6', '#8a6f5a', '#6b7280', '#374151'
+];
 const PROJECT_COLOR = '#7a5af8';
 const EVENT_COLOR = '#e0a13a';
 const STATUSES = [
@@ -106,7 +110,7 @@ const PLUS = '<svg class="plus" viewBox="0 0 24 24" aria-hidden="true"><path d="
 /* ---------------- app state ---------------- */
 
 const state = {
-  tab: 'calendar',
+  tab: 'home',
   classId: null,          // set while viewing one class
   selected: today(),
   month: new Date().getMonth(),
@@ -129,7 +133,9 @@ function itemsOn(date) {
    America/Los_Angeles no matter where the device thinks it is. Intl handles
    the DST switch for us. */
 
-const BELL = window.BELL;
+/* Falls back to an empty table: if bell.js ever fails to load, the app still
+   runs and simply shows no school day, rather than dying on first paint. */
+const BELL = window.BELL || { schedules: {}, byDate: {}, byWeekday: [], pickable: [] };
 const PT = 'America/Los_Angeles';
 const DAY_NAMES = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
 
@@ -214,12 +220,20 @@ function blockTitle(b) {
   return c ? c.name : b.label;
 }
 
+/** "Rm 402 · Mr. Diaz" for a period, when they've been filled in. */
+function blockMeta(period) {
+  const slot = period && byId(db.schedule, `p${period}`);
+  if (!slot) return '';
+  return [slot.room && `Rm ${slot.room}`, slot.teacher].filter(Boolean).join(' · ');
+}
+
 /* ---------------- rendering ---------------- */
 
 function render() {
   const inClass = state.tab === 'classes' && state.classId;
   $('#title').textContent =
-    state.tab === 'calendar' ? `${MONTHS[state.month]} ${state.year}`
+    state.tab === 'home' ? homeTitle()
+    : state.tab === 'calendar' ? `${MONTHS[state.month]} ${state.year}`
     : state.tab === 'schedule' ? 'Schedule'
     : inClass ? className(state.classId)
     : state.tab === 'classes' ? 'Classes' : 'Projects';
@@ -229,7 +243,8 @@ function render() {
   for (const t of document.querySelectorAll('.tab')) t.classList.toggle('is-active', t.dataset.tab === state.tab);
   for (const v of document.querySelectorAll('.view')) v.hidden = v.id !== `view-${state.tab}`;
 
-  if (state.tab === 'calendar') renderCalendar();
+  if (state.tab === 'home') renderHome();
+  else if (state.tab === 'calendar') renderCalendar();
   else if (state.tab === 'schedule') renderSchedule();
   else if (state.tab === 'classes') inClass ? renderClass() : renderClasses();
   else renderProjects();
@@ -384,12 +399,16 @@ function renderClass() {
 
   $('#view-classes').innerHTML = `
     <p class="back"><button class="link-btn" data-act="back">‹ Classes</button></p>
-    <div class="section-head"><h2>Homework</h2>
-      <button class="link-btn" data-act="add" data-type="homework" data-class="${c.id}">Add</button></div>
-    ${hwRows ? `<div class="card">${hwRows}</div>` : `<p class="empty">No homework.</p>`}
-    <div class="section-head"><h2>Notes</h2>
-      <button class="link-btn" data-act="add" data-type="note" data-class="${c.id}">Add</button></div>
-    ${noteRows ? `<div class="card">${noteRows}</div>` : `<p class="empty">No notes.</p>`}
+    <section class="panel">
+      <div class="panel-head"><h2>Homework</h2>
+        <button class="link-btn" data-act="add" data-type="homework" data-class="${c.id}">Add</button></div>
+      ${hwRows || `<p class="empty">Nothing set yet.</p>`}
+    </section>
+    <section class="panel">
+      <div class="panel-head"><h2>Notes</h2>
+        <button class="link-btn" data-act="add" data-type="note" data-class="${c.id}">Add</button></div>
+      ${noteRows || `<p class="empty">No notes yet.</p>`}
+    </section>
     <div class="card gap-lg"><button class="row" data-act="edit-class" data-id="${c.id}">
       <span class="swatch" style="background:${c.color}"></span>
       <span class="row-main"><span class="row-title">Edit class</span></span>${CHEV}</button></div>`;
@@ -420,6 +439,56 @@ function renderProjects() {
 }
 
 
+
+/* ---------------- home ---------------- */
+
+function homeTitle() {
+  const d = parseISO(ptNow().date);
+  return d.toLocaleDateString(undefined, { weekday: 'long', month: 'short', day: 'numeric' });
+}
+
+/** Tonight = due tomorrow. Still due = today or already late. */
+function homeWork() {
+  const t = ptNow().date;
+  const tm = shift(t, 1);
+  const open = db.homework.filter(h => !h.done);
+  return {
+    tonight: open.filter(h => h.due === tm),
+    due: open.filter(h => h.due <= t).sort((a, b) => a.due < b.due ? -1 : 1)
+  };
+}
+
+function renderHome() {
+  const now = ptNow();
+  const plan = planFor(now.date, now.weekday);
+  const pos = dayPosition(plan, now.secs);
+  tickKey = posKey(pos);
+
+  const { tonight, due } = homeWork();
+  const panel = (title, items, empty) => `<section class="panel">
+      <div class="panel-head"><h2>${title}</h2>
+        <button class="link-btn" data-act="add" data-type="homework">Add</button></div>
+      ${items.length
+        ? items.map(h => rowHTML({ kind: 'homework', item: h })).join('')
+        : `<p class="empty">${empty}</p>`}
+    </section>`;
+
+  $('#view-home').innerHTML =
+    `<button class="hero-link" data-act="tab" data-to="schedule">${heroHTML(plan, pos, now, true)}</button>
+    <div class="quick">
+      <button class="btn" data-act="add" data-type="homework">Add homework</button>
+      <div class="chips">
+        <button class="chip" data-act="add" data-type="note">Note</button>
+        <button class="chip" data-act="add" data-type="project">Project</button>
+        <button class="chip" data-act="add" data-type="event">Date</button>
+      </div>
+    </div>
+    ${panel('Do tonight', tonight, 'Nothing due tomorrow.')}
+    ${panel('Still due', due, 'Nothing outstanding. Enjoy it.')}`;
+
+  startTick();
+}
+
 /* ---------------- schedule view ---------------- */
 
 let tickTimer = null, tickKey = '';
@@ -437,9 +506,9 @@ function renderSchedule() {
 /** Identifies the current block, so the tick knows when to redraw the list. */
 const posKey = pos => pos.state + '|' + (pos.block ? pos.block.start : (pos.next ? pos.next.start : ''));
 
-function heroHTML(plan, pos, now) {
+function heroHTML(plan, pos, now, compact) {
   const dayName = parseISO(now.date).toLocaleDateString(undefined, { weekday: 'long', month: 'short', day: 'numeric' });
-  let tone = '', label = '', title = '', time = '', sub = '', bar = '';
+  let tone = '', label = '', title = '', time = '', sub = '', bar = '', meta = '';
 
   if (pos.state === 'none') {
     label = dayName;
@@ -456,6 +525,7 @@ function heroHTML(plan, pos, now) {
     title = blockTitle(pos.block);
     time = countdown(pos.left);
     sub = `left · ends ${clockLabel(pos.block.end)}`;
+    meta = blockMeta(pos.block.period);
     bar = `<span class="hero-bar"><span style="width:${Math.round(pos.elapsed / pos.total * 100)}%"></span></span>`;
   } else if (pos.state === 'passing') {
     tone = 'is-live';
@@ -469,16 +539,17 @@ function heroHTML(plan, pos, now) {
     sub = 'Done for the day.';
   }
 
-  return `<div class="hero ${tone}" id="hero">
+  return `<div class="hero ${tone}">
       <div class="hero-label">${esc(label)}</div>
-      <div class="hero-title" id="heroTitle">${esc(title)}</div>
-      ${time ? `<div class="hero-time" id="heroTime">${time}</div>` : ''}
-      <div class="hero-sub" id="heroSub">${esc(sub)}</div>
+      <div class="hero-title">${esc(title)}</div>
+      ${time ? `<div class="hero-time">${time}</div>` : ''}
+      <div class="hero-sub">${esc(sub)}</div>
+      ${meta ? `<div class="hero-meta">${esc(meta)}</div>` : ''}
       ${bar}
     </div>
-    ${plan ? `<div class="section-head"><h2>${esc(plan.name)}</h2>
+    ${compact || !plan ? '' : `<div class="section-head"><h2>${esc(plan.name)}</h2>
       <button class="link-btn" data-act="pick-plan">Change</button></div>
-      <div class="card">${plan ? blocksHTML(pos) : ''}</div>` : ''}`;
+      <div class="card">${blocksHTML(pos)}</div>`}`;
 }
 
 function blocksHTML(pos) {
@@ -487,11 +558,12 @@ function blocksHTML(pos) {
     const cls = periodClass(b.period);
     const isNow = active && b.start === active.start;
     const done = pos.state === 'after' || (active && hhmmToSecs(b.end) <= hhmmToSecs(active.start));
+    const sub = [cls ? esc(b.label) : '', esc(blockMeta(b.period))].filter(Boolean).join(' · ');
     return `<div class="row block${isNow ? ' is-now' : ''}${done ? ' is-past' : ''}">
-      <span class="block-time">${clockLabel(b.start)}</span>
+      <span class="block-time"><b>${clockLabel(b.start)}</b>${clockLabel(b.end)}</span>
       <span class="row-main">
         <span class="row-title">${esc(cls ? cls.name : b.label)}</span>
-        <span class="row-sub">${cls ? esc(b.label) + ' · ' : ''}until ${clockLabel(b.end)}</span>
+        ${sub ? `<span class="row-sub">${sub}</span>` : ''}
       </span>
       ${cls ? `<span class="swatch" style="background:${cls.color}"></span>` : ''}
     </div>`;
@@ -501,10 +573,12 @@ function blocksHTML(pos) {
 function periodsHTML() {
   const rows = [1, 2, 3, 4, 5].map(n => {
     const cls = periodClass(n);
+    const meta = blockMeta(n);
     return `<button class="row" data-act="period" data-period="${n}">
       <span class="block-time">P${n}</span>
       <span class="row-main">
         <span class="row-title${cls ? '' : ' is-muted'}">${cls ? esc(cls.name) : 'Add a class'}</span>
+        ${meta ? `<span class="row-sub">${esc(meta)}</span>` : ''}
       </span>
       ${cls ? `<span class="swatch" style="background:${cls.color}"></span>` : ''}${CHEV}</button>`;
   }).join('');
@@ -513,16 +587,19 @@ function periodsHTML() {
 
 /** Update the countdown in place every second; redraw fully when the block changes. */
 function tick() {
-  if (state.tab !== 'schedule' || document.visibilityState !== 'visible') return stopTick();
+  const onClock = state.tab === 'schedule' || state.tab === 'home';
+  if (!onClock || document.visibilityState !== 'visible') return stopTick();
   const now = ptNow();
   const plan = planFor(now.date, now.weekday);
   const pos = dayPosition(plan, now.secs);
 
-  if (posKey(pos) !== tickKey) return renderSchedule();
+  if (posKey(pos) !== tickKey) return state.tab === 'home' ? renderHome() : renderSchedule();
 
-  const time = $('#heroTime');
+  // scope to the view on screen: home and schedule each have a hero
+  const root = $(`#view-${state.tab}`);
+  const time = root && root.querySelector('.hero-time');
   if (time) time.textContent = countdown(pos.state === 'in' ? pos.left : pos.until);
-  const bar = document.querySelector('.hero-bar > span');
+  const bar = root && root.querySelector('.hero-bar > span');
   if (bar && pos.state === 'in') bar.style.width = `${Math.round(pos.elapsed / pos.total * 100)}%`;
 }
 
@@ -542,6 +619,12 @@ function openPeriodSheet(period) {
       <button class="link-btn" data-act="close" type="button">Cancel</button></div>
     <form id="form" novalidate>
       ${classField(slot?.classId)}
+      <div class="field-row">
+        <div class="field"><label for="f-room">Room <span class="opt">(optional)</span></label>
+          <input id="f-room" type="text" value="${esc(slot?.room)}" placeholder="402" autocapitalize="characters"></div>
+        <div class="field"><label for="f-teacher">Teacher <span class="opt">(optional)</span></label>
+          <input id="f-teacher" type="text" value="${esc(slot?.teacher)}" placeholder="Mr. Diaz" autocapitalize="words"></div>
+      </div>
       <button class="btn" type="submit">Save</button>
       ${slot ? '<button class="btn is-ghost" type="button" data-act="period-clear">Remove from schedule</button>' : ''}
     </form>`, { mode: 'period', period, autofocus: false });
@@ -736,9 +819,10 @@ function submitForm() {
     const classId = resolveClass();
     if (!classId) return flash('#f-newclass');
     const id = `p${ctx.period}`;
+    const data = { classId, room: val('#f-room'), teacher: val('#f-teacher') };
     const slot = byId(db.schedule, id);
-    if (slot) touch(Object.assign(slot, { classId }));
-    else db.schedule.push(touch({ id, period: ctx.period, classId }));
+    if (slot) touch(Object.assign(slot, data));
+    else db.schedule.push(touch({ id, period: ctx.period, ...data }));
     return commit();
   }
 
@@ -807,9 +891,10 @@ function removeItem() {
     const classId = resolveClass();
     if (!classId) return flash('#f-newclass');
     const id = `p${ctx.period}`;
+    const data = { classId, room: val('#f-room'), teacher: val('#f-teacher') };
     const slot = byId(db.schedule, id);
-    if (slot) touch(Object.assign(slot, { classId }));
-    else db.schedule.push(touch({ id, period: ctx.period, classId }));
+    if (slot) touch(Object.assign(slot, data));
+    else db.schedule.push(touch({ id, period: ctx.period, ...data }));
     return commit();
   }
 
@@ -1159,6 +1244,13 @@ document.addEventListener('click', e => {
       break;
     }
 
+    case 'tab':
+      state.tab = el.dataset.to;
+      render();
+      scrollTo(0, 0);
+      showView();
+      break;
+
     case 'sync': openSyncSheet(); break;
     case 'sync-start': startSync(newCode()); break;
     case 'sync-now': syncNow(); break;
@@ -1206,11 +1298,6 @@ sheet.addEventListener('input', e => e.target.classList.remove('is-bad'));
 $('#scrim').addEventListener('click', closeSheet);
 addEventListener('keydown', e => { if (e.key === 'Escape' && !wrap.hidden) closeSheet(); });
 
-$('#fab').addEventListener('click', () => openAdd({
-  type: state.tab === 'projects' ? 'project' : 'homework',
-  classId: state.classId || undefined
-}));
-
 /** Show the active view with a soft entrance. */
 function showView() {
   replay($(`#view-${state.tab}`), 'anim-view');
@@ -1243,7 +1330,7 @@ for (const t of document.querySelectorAll('.tab')) {
   t.addEventListener('click', () => {
     if (state.tab === t.dataset.tab && t.dataset.tab === 'classes') state.classId = null;
     state.tab = t.dataset.tab;
-    if (state.tab !== 'schedule') stopTick();
+    if (state.tab !== 'schedule' && state.tab !== 'home') stopTick();
     render();
     scrollTo(0, 0);
     showView();
@@ -1293,7 +1380,7 @@ document.addEventListener('visibilitychange', () => {
     scheduleSync(0);            // hand off pending edits before the app is put away
     return;
   }
-  if (state.tab === 'schedule') renderSchedule();
+  if (state.tab === 'schedule' || state.tab === 'home') render();
   scheduleSync(300);            // and pick up whatever the other device did
   if (today() === openedOn) return;
   if (state.selected === openedOn) state.selected = today();
