@@ -6,11 +6,12 @@
 /* ---------------- storage ---------------- */
 
 const KEY = 'planner.v1';
-const KINDS = ['classes', 'homework', 'notes', 'projects', 'events'];
+const KINDS = ['classes', 'homework', 'notes', 'projects', 'events', 'schedule', 'overrides'];
 
 /* `deleted` holds tombstones (id -> time) so a delete on one device also
    removes the item on the others instead of being re-added by a merge. */
-const emptyDB = () => ({ classes: [], homework: [], notes: [], projects: [], events: [], deleted: {} });
+const emptyDB = () => ({ classes: [], homework: [], notes: [], projects: [], events: [],
+  schedule: [], overrides: [], deleted: {} });
 
 const db = load();
 
@@ -99,6 +100,7 @@ const statusOf = p => STATUSES.find(s => s.id === p.status) || STATUSES[0];
 
 const CHEV = '<span class="chev"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M9 5l7 7-7 7"/></svg></span>';
 const TICK = '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 12.5l4.5 4.5L19 7.5"/></svg>';
+const TICK_ACCENT = '<span class="tick-on"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 12.5l4.5 4.5L19 7.5"/></svg></span>';
 const PLUS = '<svg class="plus" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg>';
 
 /* ---------------- app state ---------------- */
@@ -121,12 +123,104 @@ function itemsOn(date) {
   return out;
 }
 
+
+/* ---------------- school day (Pacific time) ----------------
+   The bell schedule is San Diego local time, so the clock here is pinned to
+   America/Los_Angeles no matter where the device thinks it is. Intl handles
+   the DST switch for us. */
+
+const BELL = window.BELL;
+const PT = 'America/Los_Angeles';
+const DAY_NAMES = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+
+const ptFormat = new Intl.DateTimeFormat('en-CA', {
+  timeZone: PT, weekday: 'short', year: 'numeric', month: '2-digit', day: '2-digit',
+  hour: '2-digit', minute: '2-digit', second: '2-digit', hourCycle: 'h23'
+});
+
+/** Current San Diego date, weekday and seconds-since-midnight. */
+function ptNow() {
+  const p = {};
+  for (const part of ptFormat.formatToParts(new Date())) p[part.type] = part.value;
+  return {
+    date: `${p.year}-${p.month}-${p.day}`,
+    weekday: DAY_NAMES.indexOf(p.weekday),
+    secs: +p.hour * 3600 + +p.minute * 60 + +p.second
+  };
+}
+
+const hhmmToSecs = t => { const [h, m] = t.split(':').map(Number); return h * 3600 + m * 60; };
+
+/** "3:35 PM" from "15:35" */
+function clockLabel(t) {
+  const [h, m] = t.split(':').map(Number);
+  const ampm = h >= 12 ? 'PM' : 'AM';
+  return `${((h + 11) % 12) + 1}:${pad(m)} ${ampm}`;
+}
+
+/** Which bell schedule a given day uses: your override, then the calendar, then the weekday. */
+function planFor(date, weekday) {
+  const override = byId(db.overrides, date);
+  const key = (override && BELL.schedules[override.key] && override.key)
+    || BELL.byDate[date]
+    || BELL.byWeekday[weekday];
+  if (!key) return null;
+  const s = BELL.schedules[key];
+  return { key, name: s.name, custom: !!override, rows: s.rows };
+}
+
+/** Where we are in the day: in a block, between blocks, or outside school hours. */
+function dayPosition(plan, secs) {
+  if (!plan) return { state: 'none' };
+  const blocks = plan.rows.map(r => ({ label: r[0], start: r[1], end: r[2], period: r[3] }));
+  const first = blocks[0], last = blocks[blocks.length - 1];
+
+  if (secs < hhmmToSecs(first.start)) {
+    return { state: 'before', next: first, until: hhmmToSecs(first.start) - secs, blocks };
+  }
+  if (secs >= hhmmToSecs(last.end)) return { state: 'after', blocks };
+
+  for (let i = 0; i < blocks.length; i++) {
+    const b = blocks[i], start = hhmmToSecs(b.start), end = hhmmToSecs(b.end);
+    if (secs >= start && secs < end) {
+      return {
+        state: 'in', block: b, next: blocks[i + 1], blocks,
+        left: end - secs, elapsed: secs - start, total: end - start
+      };
+    }
+    const nxt = blocks[i + 1];
+    if (nxt && secs >= end && secs < hhmmToSecs(nxt.start)) {
+      return { state: 'passing', next: nxt, blocks, until: hhmmToSecs(nxt.start) - secs };
+    }
+  }
+  return { state: 'after', blocks };
+}
+
+/** 48:12 under an hour, 1:22:04 over it. */
+function countdown(secs) {
+  const h = Math.floor(secs / 3600), m = Math.floor(secs / 60) % 60, s = secs % 60;
+  return h ? `${h}:${pad(m)}:${pad(s)}` : `${m}:${pad(s)}`;
+}
+
+/** The class you put in a period slot, if any. */
+function periodClass(period) {
+  if (!period) return null;
+  const slot = byId(db.schedule, `p${period}`);
+  return slot ? byId(db.classes, slot.classId) : null;
+}
+
+function blockTitle(b) {
+  const c = periodClass(b.period);
+  return c ? c.name : b.label;
+}
+
 /* ---------------- rendering ---------------- */
 
 function render() {
   const inClass = state.tab === 'classes' && state.classId;
   $('#title').textContent =
     state.tab === 'calendar' ? `${MONTHS[state.month]} ${state.year}`
+    : state.tab === 'schedule' ? 'Schedule'
     : inClass ? className(state.classId)
     : state.tab === 'classes' ? 'Classes' : 'Projects';
 
@@ -136,6 +230,7 @@ function render() {
   for (const v of document.querySelectorAll('.view')) v.hidden = v.id !== `view-${state.tab}`;
 
   if (state.tab === 'calendar') renderCalendar();
+  else if (state.tab === 'schedule') renderSchedule();
   else if (state.tab === 'classes') inClass ? renderClass() : renderClasses();
   else renderProjects();
 }
@@ -324,6 +419,150 @@ function renderProjects() {
       <span class="row-main"><span class="row-title accent">New Project</span></span></button></div>`;
 }
 
+
+/* ---------------- schedule view ---------------- */
+
+let tickTimer = null, tickKey = '';
+
+function renderSchedule() {
+  const now = ptNow();
+  const plan = planFor(now.date, now.weekday);
+  const pos = dayPosition(plan, now.secs);
+  tickKey = posKey(pos);
+
+  $('#view-schedule').innerHTML = heroHTML(plan, pos, now) + periodsHTML();
+  startTick();
+}
+
+/** Identifies the current block, so the tick knows when to redraw the list. */
+const posKey = pos => pos.state + '|' + (pos.block ? pos.block.start : (pos.next ? pos.next.start : ''));
+
+function heroHTML(plan, pos, now) {
+  const dayName = parseISO(now.date).toLocaleDateString(undefined, { weekday: 'long', month: 'short', day: 'numeric' });
+  let tone = '', label = '', title = '', time = '', sub = '', bar = '';
+
+  if (pos.state === 'none') {
+    label = dayName;
+    title = 'No school today';
+    sub = 'Enjoy it.';
+  } else if (pos.state === 'before') {
+    label = 'Starts soon';
+    title = blockTitle(pos.next);
+    time = countdown(pos.until);
+    sub = `until ${clockLabel(pos.next.start)}`;
+  } else if (pos.state === 'in') {
+    tone = 'is-live';
+    label = pos.block.period ? pos.block.label : 'Right now';
+    title = blockTitle(pos.block);
+    time = countdown(pos.left);
+    sub = `left · ends ${clockLabel(pos.block.end)}`;
+    bar = `<span class="hero-bar"><span style="width:${Math.round(pos.elapsed / pos.total * 100)}%"></span></span>`;
+  } else if (pos.state === 'passing') {
+    tone = 'is-live';
+    label = 'Passing period';
+    title = blockTitle(pos.next);
+    time = countdown(pos.until);
+    sub = `until ${clockLabel(pos.next.start)}`;
+  } else {
+    label = dayName;
+    title = 'School\u2019s out';
+    sub = 'Done for the day.';
+  }
+
+  return `<div class="hero ${tone}" id="hero">
+      <div class="hero-label">${esc(label)}</div>
+      <div class="hero-title" id="heroTitle">${esc(title)}</div>
+      ${time ? `<div class="hero-time" id="heroTime">${time}</div>` : ''}
+      <div class="hero-sub" id="heroSub">${esc(sub)}</div>
+      ${bar}
+    </div>
+    ${plan ? `<div class="section-head"><h2>${esc(plan.name)}</h2>
+      <button class="link-btn" data-act="pick-plan">Change</button></div>
+      <div class="card">${plan ? blocksHTML(pos) : ''}</div>` : ''}`;
+}
+
+function blocksHTML(pos) {
+  const active = pos.block;
+  return pos.blocks.map(b => {
+    const cls = periodClass(b.period);
+    const isNow = active && b.start === active.start;
+    const done = pos.state === 'after' || (active && hhmmToSecs(b.end) <= hhmmToSecs(active.start));
+    return `<div class="row block${isNow ? ' is-now' : ''}${done ? ' is-past' : ''}">
+      <span class="block-time">${clockLabel(b.start)}</span>
+      <span class="row-main">
+        <span class="row-title">${esc(cls ? cls.name : b.label)}</span>
+        <span class="row-sub">${cls ? esc(b.label) + ' · ' : ''}until ${clockLabel(b.end)}</span>
+      </span>
+      ${cls ? `<span class="swatch" style="background:${cls.color}"></span>` : ''}
+    </div>`;
+  }).join('');
+}
+
+function periodsHTML() {
+  const rows = [1, 2, 3, 4, 5].map(n => {
+    const cls = periodClass(n);
+    return `<button class="row" data-act="period" data-period="${n}">
+      <span class="block-time">P${n}</span>
+      <span class="row-main">
+        <span class="row-title${cls ? '' : ' is-muted'}">${cls ? esc(cls.name) : 'Add a class'}</span>
+      </span>
+      ${cls ? `<span class="swatch" style="background:${cls.color}"></span>` : ''}${CHEV}</button>`;
+  }).join('');
+  return `<div class="section-head"><h2>My periods</h2></div><div class="card">${rows}</div>`;
+}
+
+/** Update the countdown in place every second; redraw fully when the block changes. */
+function tick() {
+  if (state.tab !== 'schedule' || document.visibilityState !== 'visible') return stopTick();
+  const now = ptNow();
+  const plan = planFor(now.date, now.weekday);
+  const pos = dayPosition(plan, now.secs);
+
+  if (posKey(pos) !== tickKey) return renderSchedule();
+
+  const time = $('#heroTime');
+  if (time) time.textContent = countdown(pos.state === 'in' ? pos.left : pos.until);
+  const bar = document.querySelector('.hero-bar > span');
+  if (bar && pos.state === 'in') bar.style.width = `${Math.round(pos.elapsed / pos.total * 100)}%`;
+}
+
+function startTick() {
+  stopTick();
+  tickTimer = setInterval(tick, 1000);
+}
+
+function stopTick() {
+  if (tickTimer) { clearInterval(tickTimer); tickTimer = null; }
+}
+
+function openPeriodSheet(period) {
+  const slot = byId(db.schedule, `p${period}`);
+  openSheet(`
+    <div class="sheet-head"><h2 id="sheetTitle">Period ${period}</h2>
+      <button class="link-btn" data-act="close" type="button">Cancel</button></div>
+    <form id="form" novalidate>
+      ${classField(slot?.classId)}
+      <button class="btn" type="submit">Save</button>
+      ${slot ? '<button class="btn is-ghost" type="button" data-act="period-clear">Remove from schedule</button>' : ''}
+    </form>`, { mode: 'period', period, autofocus: false });
+}
+
+function openPlanSheet() {
+  const now = ptNow();
+  const plan = planFor(now.date, now.weekday);
+  const rows = BELL.pickable.map(key => `<button class="row" data-act="set-plan" data-key="${key}">
+      <span class="row-main"><span class="row-title">${esc(BELL.schedules[key].name)}</span>
+      <span class="row-sub">${clockLabel(BELL.schedules[key].rows[0][1])} – ${clockLabel(BELL.schedules[key].rows.at(-1)[2])}</span></span>
+      ${plan && plan.key === key ? TICK_ACCENT : ''}</button>`).join('');
+  openSheet(`
+    <div class="sheet-head"><h2 id="sheetTitle">Today\u2019s schedule</h2>
+      <button class="link-btn" data-act="close" type="button">Done</button></div>
+    <p class="hint">Only for today. Tomorrow goes back to the normal bell schedule.</p>
+    <div class="card">${rows}</div>
+    ${byId(db.overrides, now.date) ? '<button class="btn is-ghost" type="button" data-act="clear-plan">Use the normal schedule</button>' : ''}`,
+    { mode: 'plan', autofocus: false });
+}
+
 /* ---------------- sheet ---------------- */
 
 const wrap = $('#sheetWrap'), sheet = $('#sheet');
@@ -493,6 +732,16 @@ function submitForm() {
   if (!ctx) return;
   const editing = ctx.mode === 'edit';
 
+  if (ctx.mode === 'period') {
+    const classId = resolveClass();
+    if (!classId) return flash('#f-newclass');
+    const id = `p${ctx.period}`;
+    const slot = byId(db.schedule, id);
+    if (slot) touch(Object.assign(slot, { classId }));
+    else db.schedule.push(touch({ id, period: ctx.period, classId }));
+    return commit();
+  }
+
   if (ctx.mode === 'class') {
     const name = val('#f-name');
     if (!name) return flash('#f-name');
@@ -554,6 +803,16 @@ function flash(sel) {
 
 function removeItem() {
   if (!ctx) return;
+  if (ctx.mode === 'period') {
+    const classId = resolveClass();
+    if (!classId) return flash('#f-newclass');
+    const id = `p${ctx.period}`;
+    const slot = byId(db.schedule, id);
+    if (slot) touch(Object.assign(slot, { classId }));
+    else db.schedule.push(touch({ id, period: ctx.period, classId }));
+    return commit();
+  }
+
   if (ctx.mode === 'class') {
     const c = byId(db.classes, ctx.id);
     if (!confirm(`Delete “${c?.name}” and its homework and notes?`)) return;
@@ -872,6 +1131,34 @@ document.addEventListener('click', e => {
     case 'close': closeSheet(); break;
     case 'delete': removeItem(); break;
 
+    case 'period': openPeriodSheet(+el.dataset.period); break;
+    case 'pick-plan': openPlanSheet(); break;
+
+    case 'set-plan': {
+      const date = ptNow().date;
+      const cur = byId(db.overrides, date);
+      if (cur) touch(Object.assign(cur, { key: el.dataset.key }));
+      else db.overrides.push(touch({ id: date, date, key: el.dataset.key }));
+      commit();
+      break;
+    }
+
+    case 'clear-plan': {
+      const date = ptNow().date;
+      tombstone(date);
+      db.overrides = db.overrides.filter(o => o.id !== date);
+      commit();
+      break;
+    }
+
+    case 'period-clear': {
+      const id = `p${ctx.period}`;
+      tombstone(id);
+      db.schedule = db.schedule.filter(x => x.id !== id);
+      commit();
+      break;
+    }
+
     case 'sync': openSyncSheet(); break;
     case 'sync-start': startSync(newCode()); break;
     case 'sync-now': syncNow(); break;
@@ -956,6 +1243,7 @@ for (const t of document.querySelectorAll('.tab')) {
   t.addEventListener('click', () => {
     if (state.tab === t.dataset.tab && t.dataset.tab === 'classes') state.classId = null;
     state.tab = t.dataset.tab;
+    if (state.tab !== 'schedule') stopTick();
     render();
     scrollTo(0, 0);
     showView();
@@ -1001,9 +1289,11 @@ addEventListener('scroll', () => topbar.classList.toggle('is-scrolled', scrollY 
 let openedOn = today();
 document.addEventListener('visibilitychange', () => {
   if (document.visibilityState !== 'visible') {
+    stopTick();
     scheduleSync(0);            // hand off pending edits before the app is put away
     return;
   }
+  if (state.tab === 'schedule') renderSchedule();
   scheduleSync(300);            // and pick up whatever the other device did
   if (today() === openedOn) return;
   if (state.selected === openedOn) state.selected = today();

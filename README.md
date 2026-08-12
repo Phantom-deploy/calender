@@ -32,6 +32,7 @@ Screen**. It then launches standalone, without Safari's chrome, and works offlin
 | `manifest.webmanifest` | PWA metadata |
 | `icons/` | Generated app icons |
 | `tools/make_icons.py` | Regenerates the icons (`python3 tools/make_icons.py`) |
+| `bell.js` | Del Norte bell schedules, by weekday and by date |
 | `sync/worker.js` | The entire sync server: one encrypted blob per code |
 
 ## Behavior worth knowing
@@ -56,6 +57,30 @@ Screen**. It then launches standalone, without Safari's chrome, and works offlin
 - **Launch splash**: iOS builds it from `background_color` in the manifest,
   which is set to black. Switch it (and `theme_color`) to `#f6f7f9` if you
   decide to live in light mode.
+
+## Schedule
+
+The Schedule tab shows today's bell schedule with a live countdown for the
+period you're in — big at the top, with the class name you assigned rather than
+"Period 3". Under it is the whole day, current block highlighted, finished ones
+dimmed.
+
+Assign your classes once under **My periods** (tap a period, pick a class — you
+can create one right there). Periods 1–5 are the same every day, so the app
+maps them onto whichever bell schedule the day happens to use.
+
+`bell.js` holds the schedules, transcribed from *DEL NORTE HIGH SCHOOL — Bell
+Schedules (Printer Friendly)* (the PDF is in the repo). It knows the regular
+day, Wednesday late start, the first day, minimum days, conferences, parade and
+safety-drill days, pep rally, and all nine finals days, and picks the right one
+by date. Weekends show "No school today". **Change** overrides just that one day
+for anything unscheduled — a pep rally, say. Staff-only blocks (Pro Grow) are
+left out.
+
+Everything runs on `America/Los_Angeles` regardless of the device's own
+timezone, so the countdown is right even on a laptop set to another zone, and
+DST is handled by `Intl`. To update for next year, edit the rows and dates in
+`bell.js`.
 
 ## Sync between devices
 

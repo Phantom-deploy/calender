@@ -60,6 +60,9 @@
     <div id="agenda"></div>
   </section>
 
+  <!-- Schedule -->
+  <section class="view" id="view-schedule" hidden></section>
+
   <!-- Classes -->
   <section class="view" id="view-classes" hidden></section>
 
@@ -76,6 +79,10 @@
     <svg viewBox="0 0 24 24" aria-hidden="true"><rect x="3.2" y="4.8" width="17.6" height="15.4" rx="3"/><path d="M3.2 9.6h17.6M8 3.2v3.2M16 3.2v3.2"/></svg>
     <span>Calendar</span>
   </button>
+  <button class="tab" data-tab="schedule" type="button">
+    <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="8.6"/><path d="M12 7.2V12l3.2 2"/></svg>
+    <span>Schedule</span>
+  </button>
   <button class="tab" data-tab="classes" type="button">
     <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 18.2A2.3 2.3 0 016.3 16H20"/><path d="M6.3 3H20v18H6.3A2.3 2.3 0 014 18.7V5.3A2.3 2.3 0 016.3 3z"/></svg>
     <span>Classes</span>
@@ -91,6 +98,7 @@
   <div class="sheet" id="sheet" role="dialog" aria-modal="true" aria-labelledby="sheetTitle"></div>
 </div>
 
+<script src="bell.js"></script>
 <script src="app.js"></script>
 </body>
 </html>

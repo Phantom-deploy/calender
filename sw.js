@@ -1,10 +1,11 @@
 /* Offline shell. Bump CACHE when any asset changes. */
-const CACHE = 'planner-v4';
+const CACHE = 'planner-v5';
 const ASSETS = [
   './',
   'index.html',
   'app.css',
   'app.js',
+  'bell.js',
   'manifest.webmanifest',
   'icons/icon-180.png',
   'icons/icon-192.png',
