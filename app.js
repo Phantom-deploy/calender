@@ -578,7 +578,7 @@ function removeItem() {
    record name and an AES-GCM blob it cannot read. Devices merge per item by
    "newest edit wins", so two phones editing offline both keep their work. */
 
-const SYNC_URL = '';                    // your worker, e.g. https://planner-sync.you.workers.dev
+const SYNC_URL = 'https://planner-sync.aryan-malik8u8.workers.dev';
 const SYNC_KEY = 'planner.sync';
 const CODE_CHARS = '0123456789ABCDEFGHJKMNPQRSTVWXYZ';   // Crockford-style: no I, L, O or U
 const TOMB_TTL = 120 * 86400000;        // forget tombstones after ~4 months

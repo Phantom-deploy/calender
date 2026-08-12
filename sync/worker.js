@@ -4,9 +4,12 @@
    blob is AES-GCM ciphertext the app encrypts before sending. Losing the code
    means losing the data — there is nothing here that could recover it.
 
-   Deploy:  cd sync && npx wrangler kv namespace create SYNC
-            (put the printed id in wrangler.toml, then)
-            npx wrangler deploy                                              */
+   Each record is its own Durable Object instance, so the read-check-write
+   that backs conflict detection is handled by a single, strictly-consistent
+   object instead of a shared store — two near-simultaneous writes can't both
+   read the same stale revision and silently clobber one another.
+
+   Deploy:  cd sync && npx wrangler deploy                                   */
 
 const CORS = {
   'access-control-allow-origin': '*',
@@ -30,26 +33,42 @@ export default {
     const id = new URL(request.url).pathname.replace(/^\/+/, '');
     if (!/^[a-f0-9]{32}$/.test(id)) return json({ error: 'bad record' }, 400);
 
-    if (request.method === 'GET') {
-      return json(await env.SYNC.get(id, 'json') || { rev: 0, blob: null });
+    if (request.method !== 'GET' && request.method !== 'PUT') {
+      return json({ error: 'method not allowed' }, 405);
     }
 
-    if (request.method === 'PUT') {
-      let body;
-      try { body = await request.json(); } catch { return json({ error: 'bad body' }, 400); }
-      if (typeof body.blob !== 'string' || body.blob.length > MAX_BLOB) {
-        return json({ error: 'bad blob' }, 400);
-      }
-
-      const current = await env.SYNC.get(id, 'json') || { rev: 0, blob: null };
-      // Whoever wrote last wins the race; the client merges and retries.
-      if ((body.rev | 0) !== current.rev) return json({ conflict: true, ...current }, 409);
-
-      const next = { rev: current.rev + 1, blob: body.blob, at: Date.now() };
-      await env.SYNC.put(id, JSON.stringify(next));
-      return json({ rev: next.rev });
-    }
-
-    return json({ error: 'method not allowed' }, 405);
+    // One Durable Object instance per record id: every GET/PUT for a given
+    // code is handled by the same single-threaded instance, so the
+    // rev check inside it can't race against a concurrent write.
+    const stub = env.SYNC_DO.get(env.SYNC_DO.idFromName(id));
+    return stub.fetch(request);
   }
 };
+
+export class SyncRecord {
+  constructor(state) {
+    this.state = state;
+  }
+
+  async fetch(request) {
+    if (request.method === 'GET') {
+      const rec = (await this.state.storage.get('rec')) || { rev: 0, blob: null };
+      return json(rec);
+    }
+
+    let body;
+    try { body = await request.json(); } catch { return json({ error: 'bad body' }, 400); }
+    if (typeof body.blob !== 'string' || body.blob.length > MAX_BLOB) {
+      return json({ error: 'bad blob' }, 400);
+    }
+
+    const current = (await this.state.storage.get('rec')) || { rev: 0, blob: null };
+    // Whoever's write lands with the rev they last read wins; the client
+    // merges the returned record and retries on a 409.
+    if ((body.rev | 0) !== current.rev) return json({ conflict: true, ...current }, 409);
+
+    const next = { rev: current.rev + 1, blob: body.blob, at: Date.now() };
+    await this.state.storage.put('rec', next);
+    return json({ rev: next.rev });
+  }
+}

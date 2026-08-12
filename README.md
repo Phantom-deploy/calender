@@ -79,16 +79,17 @@ while open.
 
 ### Standing up the server
 
-The whole server is `sync/worker.js` — about 50 lines on Cloudflare's free tier.
+The whole server is `sync/worker.js` — about 70 lines on Cloudflare's free tier.
+Each sync code gets its own Durable Object instance, so the conflict check
+(`rev` must match) is handled by a single strictly-consistent object instead of
+a shared store — two devices writing at the same moment can't both read a
+stale revision and silently overwrite one another. Verified with concurrent
+writers against the live deployment: exactly one wins, the rest get a clean 409
+with the current record to merge against.
 
 ```bash
 cd sync
-npx wrangler kv namespace create SYNC
-```
-
-Put the printed id into `wrangler.toml`, then:
-
-```bash
+npx wrangler login      # opens a browser tab to sign in
 npx wrangler deploy
 ```
 

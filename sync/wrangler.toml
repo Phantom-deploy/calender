@@ -2,7 +2,10 @@ name = "planner-sync"
 main = "worker.js"
 compatibility_date = "2025-06-01"
 
-# npx wrangler kv namespace create SYNC   →   paste the printed id below
-[[kv_namespaces]]
-binding = "SYNC"
-id = "PUT_YOUR_KV_NAMESPACE_ID_HERE"
+[[durable_objects.bindings]]
+name = "SYNC_DO"
+class_name = "SyncRecord"
+
+[[migrations]]
+tag = "v1"
+new_sqlite_classes = ["SyncRecord"]
