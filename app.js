@@ -6,7 +6,11 @@
 /* ---------------- storage ---------------- */
 
 const KEY = 'planner.v1';
-const emptyDB = () => ({ classes: [], homework: [], notes: [], projects: [], events: [] });
+const KINDS = ['classes', 'homework', 'notes', 'projects', 'events'];
+
+/* `deleted` holds tombstones (id -> time) so a delete on one device also
+   removes the item on the others instead of being re-added by a merge. */
+const emptyDB = () => ({ classes: [], homework: [], notes: [], projects: [], events: [], deleted: {} });
 
 const db = load();
 
@@ -14,20 +18,36 @@ function load() {
   const base = emptyDB();
   try {
     const raw = JSON.parse(localStorage.getItem(KEY));
-    if (raw) for (const k of Object.keys(base)) if (Array.isArray(raw[k])) base[k] = raw[k];
+    if (raw) {
+      for (const k of KINDS) if (Array.isArray(raw[k])) base[k] = raw[k];
+      if (raw.deleted && typeof raw.deleted === 'object') base.deleted = raw.deleted;
+    }
   } catch {}
   return base;
 }
 
 let saveTimer;
-function save() {
+/** Write to localStorage only — used when applying data that came from sync. */
+function persist() {
   clearTimeout(saveTimer);
   saveTimer = setTimeout(() => {
     try { localStorage.setItem(KEY, JSON.stringify(db)); } catch {}
   }, 60);
 }
 
+/** A local edit: store it and send it to the other devices. */
+function save() {
+  persist();
+  sync.dirty = true;
+  scheduleSync();
+}
+
 const uid = () => Date.now().toString(36) + Math.random().toString(36).slice(2, 7);
+const stamp = () => Date.now();
+
+/** Mark an item as changed now, so the newest edit wins when devices merge. */
+const touch = item => { item.updatedAt = stamp(); return item; };
+const tombstone = id => { db.deleted[id] = stamp(); };
 
 /* ---------------- dates (local, no timezone math) ---------------- */
 
@@ -464,7 +484,7 @@ function resolveClass() {
   if (sel.value !== '__new') return sel.value;
   const name = val('#f-newclass');
   if (!name) return null;
-  const c = { id: uid(), name, color: COLORS[db.classes.length % COLORS.length] };
+  const c = touch({ id: uid(), name, color: COLORS[db.classes.length % COLORS.length] });
   db.classes.push(c);
   return c.id;
 }
@@ -476,8 +496,8 @@ function submitForm() {
   if (ctx.mode === 'class') {
     const name = val('#f-name');
     if (!name) return flash('#f-name');
-    if (ctx.id) Object.assign(byId(db.classes, ctx.id), { name, color: ctx.color });
-    else db.classes.push({ id: uid(), name, color: ctx.color });
+    if (ctx.id) touch(Object.assign(byId(db.classes, ctx.id), { name, color: ctx.color }));
+    else db.classes.push(touch({ id: uid(), name, color: ctx.color }));
     return commit();
   }
 
@@ -487,8 +507,8 @@ function submitForm() {
     const classId = resolveClass();
     if (!classId) return flash('#f-newclass');
     const data = { title, classId, due: val('#f-due') || shift(today(), 1), details: val('#f-details') };
-    if (editing) Object.assign(byId(db.homework, ctx.id), data);
-    else db.homework.push({ id: uid(), done: false, ...data });
+    if (editing) touch(Object.assign(byId(db.homework, ctx.id), data));
+    else db.homework.push(touch({ id: uid(), done: false, ...data }));
 
   } else if (ctx.type === 'note') {
     const text = val('#f-text');
@@ -496,8 +516,8 @@ function submitForm() {
     const classId = resolveClass();
     if (!classId) return flash('#f-newclass');
     const data = { text, classId, date: val('#f-date') || today() };
-    if (editing) Object.assign(byId(db.notes, ctx.id), data);
-    else db.notes.push({ id: uid(), ...data });
+    if (editing) touch(Object.assign(byId(db.notes, ctx.id), data));
+    else db.notes.push(touch({ id: uid(), ...data }));
 
   } else if (ctx.type === 'project') {
     const name = val('#f-name');
@@ -506,15 +526,15 @@ function submitForm() {
       name, due: val('#f-due') || shift(today(), 7),
       status: val('#f-status') || 'todo', description: val('#f-desc')
     };
-    if (editing) Object.assign(byId(db.projects, ctx.id), data);
-    else db.projects.push({ id: uid(), ...data });
+    if (editing) touch(Object.assign(byId(db.projects, ctx.id), data));
+    else db.projects.push(touch({ id: uid(), ...data }));
 
   } else {
     const title = val('#f-title');
     if (!title) return flash('#f-title');
     const data = { title, date: val('#f-date') || today(), details: val('#f-details') };
-    if (editing) Object.assign(byId(db.events, ctx.id), data);
-    else db.events.push({ id: uid(), ...data });
+    if (editing) touch(Object.assign(byId(db.events, ctx.id), data));
+    else db.events.push(touch({ id: uid(), ...data }));
   }
   commit();
 }
@@ -537,6 +557,9 @@ function removeItem() {
   if (ctx.mode === 'class') {
     const c = byId(db.classes, ctx.id);
     if (!confirm(`Delete “${c?.name}” and its homework and notes?`)) return;
+    for (const x of db.homework) if (x.classId === ctx.id) tombstone(x.id);
+    for (const x of db.notes) if (x.classId === ctx.id) tombstone(x.id);
+    tombstone(ctx.id);
     db.classes = db.classes.filter(x => x.id !== ctx.id);
     db.homework = db.homework.filter(x => x.classId !== ctx.id);
     db.notes = db.notes.filter(x => x.classId !== ctx.id);
@@ -544,8 +567,251 @@ function removeItem() {
     return commit();
   }
   const key = LISTS[ctx.type];
+  tombstone(ctx.id);
   db[key] = db[key].filter(x => x.id !== ctx.id);
   commit();
+}
+
+/* ---------------- sync ----------------
+   No account: one shared code is the identity *and* the encryption key.
+   The code never leaves the device — the server sees a hash of it for the
+   record name and an AES-GCM blob it cannot read. Devices merge per item by
+   "newest edit wins", so two phones editing offline both keep their work. */
+
+const SYNC_URL = '';                    // your worker, e.g. https://planner-sync.you.workers.dev
+const SYNC_KEY = 'planner.sync';
+const CODE_CHARS = '0123456789ABCDEFGHJKMNPQRSTVWXYZ';   // Crockford-style: no I, L, O or U
+const TOMB_TTL = 120 * 86400000;        // forget tombstones after ~4 months
+
+const sync = { code: null, url: SYNC_URL, rev: 0, at: 0, status: 'off', note: '', dirty: false, busy: false };
+
+function loadSync() {
+  try {
+    const s = JSON.parse(localStorage.getItem(SYNC_KEY) || 'null');
+    if (s && s.code) {
+      sync.code = s.code;
+      sync.url = s.url || SYNC_URL;
+      sync.rev = s.rev | 0;
+      sync.at = s.at | 0;
+      sync.status = 'idle';
+    }
+  } catch {}
+}
+
+function saveSync() {
+  try {
+    localStorage.setItem(SYNC_KEY, sync.code
+      ? JSON.stringify({ code: sync.code, url: sync.url, rev: sync.rev, at: sync.at })
+      : '');
+  } catch {}
+}
+
+const enc = new TextEncoder();
+const dec = new TextDecoder();
+const b64 = u8 => btoa(String.fromCharCode(...u8));
+const unb64 = s => Uint8Array.from(atob(s), c => c.charCodeAt(0));
+
+function newCode() {
+  const r = crypto.getRandomValues(new Uint8Array(12));
+  const s = [...r].map(x => CODE_CHARS[x % 32]).join('');
+  return `${s.slice(0, 4)}-${s.slice(4, 8)}-${s.slice(8, 12)}`;
+}
+
+/** Accepts any spacing/casing, forgives I/L/O typos, returns XXXX-XXXX-XXXX or null. */
+function cleanCode(raw) {
+  const s = String(raw || '').toUpperCase().replace(/[^0-9A-Z]/g, '')
+    .replace(/O/g, '0').replace(/[IL]/g, '1');   // safe: none of I, L, O are in the alphabet
+  if (s.length !== 12 || [...s].some(c => !CODE_CHARS.includes(c))) return null;
+  return `${s.slice(0, 4)}-${s.slice(4, 8)}-${s.slice(8, 12)}`;
+}
+
+let keyCache = { code: null, key: null, id: null };
+
+async function codeKeys(code) {
+  if (keyCache.code === code) return keyCache;
+  const digest = await crypto.subtle.digest('SHA-256', enc.encode('planner.id.v1|' + code));
+  const id = [...new Uint8Array(digest)].map(b => b.toString(16).padStart(2, '0')).join('').slice(0, 32);
+  const base = await crypto.subtle.importKey('raw', enc.encode(code), 'PBKDF2', false, ['deriveKey']);
+  const key = await crypto.subtle.deriveKey(
+    { name: 'PBKDF2', salt: enc.encode('planner.key.v1'), iterations: 120000, hash: 'SHA-256' },
+    base, { name: 'AES-GCM', length: 256 }, false, ['encrypt', 'decrypt']);
+  keyCache = { code, key, id };
+  return keyCache;
+}
+
+async function seal(key, obj) {
+  const iv = crypto.getRandomValues(new Uint8Array(12));
+  const ct = await crypto.subtle.encrypt({ name: 'AES-GCM', iv }, key, enc.encode(JSON.stringify(obj)));
+  return b64(iv) + '.' + b64(new Uint8Array(ct));
+}
+
+async function open_(key, blob) {
+  const [iv, ct] = String(blob).split('.');
+  const pt = await crypto.subtle.decrypt({ name: 'AES-GCM', iv: unb64(iv) }, key, unb64(ct));
+  return JSON.parse(dec.decode(pt));
+}
+
+/** Fold a remote snapshot into the local one. Returns true if local changed. */
+function mergeInto(local, remote) {
+  if (!remote || typeof remote !== 'object') return false;
+  let changed = false;
+
+  for (const [id, t] of Object.entries(remote.deleted || {})) {
+    if ((local.deleted[id] || 0) < t) { local.deleted[id] = t; changed = true; }
+  }
+
+  for (const kind of KINDS) {
+    const byKey = new Map(local[kind].map(x => [x.id, x]));
+    for (const r of (Array.isArray(remote[kind]) ? remote[kind] : [])) {
+      if (!r || typeof r.id !== 'string') continue;
+      const mine = byKey.get(r.id);
+      if (!mine || (r.updatedAt || 0) > (mine.updatedAt || 0)) { byKey.set(r.id, r); changed = true; }
+    }
+    const kept = [...byKey.values()].filter(x => (local.deleted[x.id] || 0) <= (x.updatedAt || 0));
+    if (kept.length !== local[kind].length) changed = true;
+    local[kind] = kept;
+  }
+
+  const cutoff = stamp() - TOMB_TTL;
+  for (const [id, t] of Object.entries(local.deleted)) if (t < cutoff) delete local.deleted[id];
+  return changed;
+}
+
+function setStatus(status, note = '') {
+  sync.status = status;
+  sync.note = note;
+  paintSync();
+}
+
+async function syncNow() {
+  if (!sync.code || !sync.url || sync.busy) return;
+  if (!navigator.onLine) return setStatus('offline');
+  if (!crypto.subtle) return setStatus('error', 'Needs a secure (https) connection');
+
+  sync.busy = true;
+  setStatus('syncing');
+  try {
+    const { key, id } = await codeKeys(sync.code);
+    const base = sync.url.replace(/\/+$/, '') + '/' + id;
+
+    let remote = await (await fetchOK(base, { cache: 'no-store' })).json();
+    let pulled = false;
+    if (remote.blob) {
+      pulled = mergeInto(db, await open_(key, remote.blob));
+      if (pulled) { persist(); render(); }
+    }
+
+    if (pulled || sync.dirty || !remote.blob) {
+      let res = await put(base, remote.rev, key);
+      if (res.status === 409) {                   // someone else wrote first
+        const fresh = await res.json();
+        if (fresh.blob) { if (mergeInto(db, await open_(key, fresh.blob))) { persist(); render(); } }
+        res = await put(base, fresh.rev, key);
+      }
+      if (!res.ok) throw new Error('server ' + res.status);
+      sync.rev = (await res.json()).rev;
+      sync.dirty = false;
+    }
+
+    sync.at = stamp();
+    saveSync();
+    setStatus('ok');
+  } catch (e) {
+    const wrongCode = e && (e.name === 'OperationError' || /operation-specific/i.test(e.message || ''));
+    setStatus('error', wrongCode ? 'That code does not match this data' : (e.message || 'Could not reach the server'));
+  } finally {
+    sync.busy = false;
+  }
+}
+
+async function put(base, rev, key) {
+  return fetch(base, {
+    method: 'PUT',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({ rev, blob: await seal(key, db) })
+  });
+}
+
+async function fetchOK(url, opts) {
+  const r = await fetch(url, opts);
+  if (!r.ok) throw new Error('server ' + r.status);
+  return r;
+}
+
+let syncTimer;
+function scheduleSync(delay = 2500) {
+  if (!sync.code) return;
+  clearTimeout(syncTimer);
+  syncTimer = setTimeout(syncNow, delay);
+}
+
+function syncLabel() {
+  if (!sync.code) return 'Off';
+  if (sync.status === 'syncing') return 'Syncing…';
+  if (sync.status === 'offline') return 'Offline — will sync later';
+  if (sync.status === 'error') return sync.note || 'Sync problem';
+  if (!sync.at) return 'Ready';
+  const mins = Math.round((stamp() - sync.at) / 60000);
+  if (mins < 1) return 'Synced just now';
+  if (mins < 60) return `Synced ${mins} min ago`;
+  const hrs = Math.round(mins / 60);
+  return hrs < 24 ? `Synced ${hrs} h ago` : `Synced ${Math.round(hrs / 24)} d ago`;
+}
+
+/** Reflect sync state on the toolbar icon and inside the sheet, without a re-render. */
+function paintSync() {
+  const btn = $('#syncBtn');
+  btn.classList.toggle('is-busy', sync.status === 'syncing');
+  btn.classList.toggle('is-bad', sync.status === 'error');
+  btn.classList.toggle('is-on', sync.status === 'ok' || sync.status === 'idle');
+  const line = sheet.querySelector('#syncStatus');
+  if (line) {
+    line.textContent = syncLabel();
+    line.className = 'sync-status' + (sync.status === 'error' ? ' is-bad' : '');
+  }
+}
+
+function openSyncSheet() {
+  const on = !!sync.code;
+  const body = on ? `
+    <p class="sync-code" data-act="sync-copy" title="Tap to copy">${esc(sync.code)}</p>
+    <p class="hint">Enter this code on another device and both stay in step.</p>
+    <p class="sync-status" id="syncStatus">${esc(syncLabel())}</p>
+    <button class="btn" type="button" data-act="sync-now">Sync now</button>
+    <button class="btn is-ghost" type="button" data-act="sync-off">Stop syncing on this device</button>`
+  : `
+    <p class="hint">Sync keeps the same homework, notes and projects on every device you use.
+      No account: one code is the key, and your data is encrypted before it leaves this device.</p>
+    ${SYNC_URL ? '' : `<div class="field"><label for="f-url">Server</label>
+      <input id="f-url" type="url" inputmode="url" autocapitalize="off" autocorrect="off"
+        placeholder="https://…workers.dev" value="${esc(sync.url)}"></div>`}
+    <button class="btn" type="button" data-act="sync-start">Start syncing</button>
+    <p class="hint" style="text-align:center;margin:14px 4px 6px">or use a code from another device</p>
+    <div class="field">
+      <input id="f-code" type="text" placeholder="XXXX-XXXX-XXXX" autocapitalize="characters"
+        autocorrect="off" spellcheck="false" enterkeyhint="done"></div>
+    <button class="btn is-soft" type="button" data-act="sync-connect">Connect</button>`;
+
+  openSheet(`
+    <div class="sheet-head"><h2 id="sheetTitle">Sync</h2>
+      <button class="link-btn" data-act="close" type="button">Done</button></div>
+    ${body}`, { mode: 'sync', autofocus: false });
+  paintSync();
+}
+
+async function startSync(code) {
+  const url = (sheet.querySelector('#f-url')?.value || sync.url).trim();
+  if (!url) return flash('#f-url');
+  sync.url = url;
+  sync.code = code;
+  sync.rev = 0;
+  sync.at = 0;
+  sync.dirty = true;
+  keyCache = { code: null, key: null, id: null };
+  saveSync();
+  openSyncSheet();
+  await syncNow();
+  openSyncSheet();
 }
 
 /* ---------------- events ---------------- */
@@ -573,6 +839,7 @@ document.addEventListener('click', e => {
       const h = byId(db.homework, el.dataset.id);
       if (!h) break;
       h.done = !h.done;
+      touch(h);
       save();
       render();
       if (h.done) document.querySelector(`.check[data-id="${h.id}"]`)?.classList.add('pop');
@@ -595,6 +862,32 @@ document.addEventListener('click', e => {
     case 'type': openAdd({ ...(ctx?.seed || {}), type: el.dataset.type }); break;
     case 'close': closeSheet(); break;
     case 'delete': removeItem(); break;
+
+    case 'sync': openSyncSheet(); break;
+    case 'sync-start': startSync(newCode()); break;
+    case 'sync-now': syncNow(); break;
+
+    case 'sync-connect': {
+      const code = cleanCode(sheet.querySelector('#f-code')?.value);
+      if (code) startSync(code); else flash('#f-code');
+      break;
+    }
+
+    case 'sync-off':
+      sync.code = null;
+      sync.dirty = false;
+      keyCache = { code: null, key: null, id: null };
+      saveSync();
+      setStatus('off');
+      openSyncSheet();
+      break;
+
+    case 'sync-copy':
+      navigator.clipboard?.writeText(sync.code).then(() => {
+        el.dataset.copied = '1';
+        setTimeout(() => delete el.dataset.copied, 1200);
+      }).catch(() => {});
+      break;
 
     case 'color':
       if (ctx) {
@@ -697,15 +990,28 @@ addEventListener('scroll', () => topbar.classList.toggle('is-scrolled', scrollY 
 
 /* roll over at midnight if the app is left open */
 let openedOn = today();
-addEventListener('visibilitychange', () => {
-  if (document.visibilityState !== 'visible' || today() === openedOn) return;
+document.addEventListener('visibilitychange', () => {
+  if (document.visibilityState !== 'visible') {
+    scheduleSync(0);            // hand off pending edits before the app is put away
+    return;
+  }
+  scheduleSync(300);            // and pick up whatever the other device did
+  if (today() === openedOn) return;
   if (state.selected === openedOn) state.selected = today();
   openedOn = today();
   render();
 });
 
+addEventListener('online', () => scheduleSync(500));
+setInterval(() => { if (document.visibilityState === 'visible') scheduleSync(0); }, 300000);
+
+$('#syncBtn').addEventListener('click', openSyncSheet);
+
 render();
 showView();
+loadSync();
+paintSync();
+if (sync.code) scheduleSync(400);
 
 if ('serviceWorker' in navigator && location.protocol.startsWith('http')) {
   addEventListener('load', () => navigator.serviceWorker.register('sw.js').catch(() => {}));

@@ -174,6 +174,12 @@ svg {
 
 .icon-btn[hidden] { display: none; }
 
+#syncBtn.is-on { color: var(--accent); }
+#syncBtn.is-bad { color: var(--danger); }
+#syncBtn.is-busy { color: var(--accent); animation: breathe 1.4s ease-in-out infinite; }
+
+@keyframes breathe { 50% { opacity: .35; } }
+
 #themeBtn .i-sun { display: none; }
 [data-theme="dark"] #themeBtn .i-sun { display: block; }
 [data-theme="dark"] #themeBtn .i-moon { display: none; }
@@ -708,6 +714,47 @@ main {
 }
 
 .btn:active { transform: scale(.98); opacity: .9; }
+
+/* ---------- Sync ---------- */
+.sync-code {
+  margin: 4px 0 10px;
+  padding: 16px 12px;
+  border-radius: var(--r-field);
+  background: var(--accent-soft);
+  color: var(--accent);
+  font-size: clamp(20px, 6.4vw, 26px);
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-align: center;
+  font-variant-numeric: tabular-nums;
+  cursor: pointer;
+  transition: transform .18s var(--ease);
+}
+
+.sync-code:active { transform: scale(.98); }
+.sync-code[data-copied]::after { content: " ✓ copied"; font-size: 13px; letter-spacing: 0; }
+
+.sync-status {
+  margin: 0 4px 14px;
+  font-size: 14px;
+  color: var(--muted);
+  text-align: center;
+}
+
+.sync-status.is-bad { color: var(--danger); }
+
+.hint {
+  color: var(--muted);
+  font-size: 14px;
+  line-height: 1.5;
+  margin: 2px 4px 14px;
+}
+
+.btn.is-soft {
+  background: var(--accent-soft);
+  color: var(--accent);
+  box-shadow: none;
+}
 
 .btn.is-ghost {
   background: none;

@@ -32,6 +32,7 @@ Screen**. It then launches standalone, without Safari's chrome, and works offlin
 | `manifest.webmanifest` | PWA metadata |
 | `icons/` | Generated app icons |
 | `tools/make_icons.py` | Regenerates the icons (`python3 tools/make_icons.py`) |
+| `sync/worker.js` | The entire sync server: one encrypted blob per code |
 
 ## Behavior worth knowing
 
@@ -56,12 +57,60 @@ Screen**. It then launches standalone, without Safari's chrome, and works offlin
   which is set to black. Switch it (and `theme_color`) to `#f6f7f9` if you
   decide to live in light mode.
 
+## Sync between devices
+
+Sync is off until you turn it on, and it never asks for an account. One random
+code — `4KP2-9TXQ-M7VB` — is both the name of your data and the key to it. Enter
+the same code on another device and the two stay in step.
+
+Nothing readable leaves the device. The app derives two things from the code:
+a SHA-256 hash used as the record name, and (via PBKDF2) an AES-GCM key used to
+encrypt the data. The server stores a name it cannot reverse and a blob it
+cannot read. **The flip side: the code is the only key. Lose it on every device
+and the data is gone — there is no reset link.**
+
+Merging is per item, newest edit wins, with tombstones for deletions. Two
+devices can both work offline and neither loses anything when they reconnect;
+a delete on one device stays deleted instead of being resurrected by the other.
+
+It syncs on open, a couple of seconds after an edit, when the app goes to the
+background or comes back, when the network returns, and every five minutes
+while open.
+
+### Standing up the server
+
+The whole server is `sync/worker.js` — about 50 lines on Cloudflare's free tier.
+
+```bash
+cd sync
+npx wrangler kv namespace create SYNC
+```
+
+Put the printed id into `wrangler.toml`, then:
+
+```bash
+npx wrangler deploy
+```
+
+Wrangler prints a URL like `https://planner-sync.<you>.workers.dev`. Paste it
+into `SYNC_URL` near the top of `app.js` and push — then a new device only needs
+the code. (You can also paste the URL into the Server field in the sync sheet on
+each device, which is handy for trying it before committing to a URL.)
+
+Any server implementing the same three-line protocol works: `GET /<32-hex id>`
+returns `{rev, blob}`, `PUT /<id>` with `{rev, blob}` stores it and returns the
+new `rev`, or `409` with the current record if `rev` is stale.
+
+Sync needs a secure context (https, or localhost) because it uses WebCrypto.
+GitHub Pages is https, so that comes free.
+
 ## Data
 
-Data lives only in this browser profile, under the `planner.v1` key. It survives
-reloads and offline use, but clearing Safari's website data will erase it, and it
-doesn't sync between devices. Home Screen apps get more durable storage than a
-plain Safari tab, so adding it to the Home Screen is the safer place to keep it.
+Data lives in this browser profile under the `planner.v1` key (sync settings sit
+in `planner.sync`). It survives reloads and offline use, but clearing Safari's
+website data will erase it. Home Screen apps get more durable storage than a
+plain Safari tab, so that's the safer place to keep it — and with sync on, the
+other device is your backup.
 
 ## Editing the icons
 
