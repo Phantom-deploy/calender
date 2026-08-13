@@ -304,6 +304,7 @@ main {
   height: 5px;
   border-radius: 50%;
   background: var(--muted);
+  box-shadow: inset 0 0 0 .5px rgba(0, 0, 0, .18);
 }
 
 /* class colours are picked for a light background; lift them on black */
@@ -388,6 +389,8 @@ main {
   height: 10px;
   border-radius: 50%;
   background: var(--muted);
+  /* a near-white class colour would otherwise vanish into a white card */
+  box-shadow: inset 0 0 0 1px rgba(0, 0, 0, .12);
 }
 
 .check {
@@ -668,11 +671,15 @@ main {
   width: 32px;
   height: 32px;
   border-radius: 50%;
+  /* a near-white swatch needs its own edge to read against the sheet */
+  box-shadow: inset 0 0 0 1px rgba(0, 0, 0, .1);
   transition: transform .2s var(--ease), box-shadow .2s var(--ease);
 }
 
 .color:active { transform: scale(.88); }
-.color.is-on { box-shadow: 0 0 0 3px var(--surface), 0 0 0 5.5px var(--text); }
+.color.is-on {
+  box-shadow: inset 0 0 0 1px rgba(0, 0, 0, .1), 0 0 0 3px var(--surface), 0 0 0 5.5px var(--text);
+}
 
 .segmented {
   display: grid;

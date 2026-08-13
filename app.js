@@ -13,7 +13,14 @@ const KINDS = ['classes', 'homework', 'notes', 'projects', 'events', 'schedule',
 const emptyDB = () => ({ classes: [], homework: [], notes: [], projects: [], events: [],
   schedule: [], overrides: [], deleted: {} });
 
+let saveTimer;              // declared before load() runs, since persist() below needs it
+let migratedOnLoad = false;
 const db = load();
+// load() only builds the object in memory; without this the backfilled
+// completedAt below is lost the moment the tab closes (nothing else had a
+// reason to save yet), and every relaunch would silently hand out a fresh
+// 2-day countdown forever instead of the one-time grace period intended.
+if (migratedOnLoad) persist();
 
 function load() {
   const base = emptyDB();
@@ -24,10 +31,13 @@ function load() {
       if (raw.deleted && typeof raw.deleted === 'object') base.deleted = raw.deleted;
     }
   } catch {}
+  // Homework completed before this feature existed has no completedAt, so it
+  // would never be swept. Give it a one-time 2-day countdown starting now,
+  // rather than judging it by an old edit time and deleting it on the spot.
+  for (const h of base.homework) if (h.done && !h.completedAt) { h.completedAt = Date.now(); migratedOnLoad = true; }
   return base;
 }
 
-let saveTimer;
 /** Write to localStorage only — used when applying data that came from sync. */
 function persist() {
   clearTimeout(saveTimer);
@@ -49,6 +59,21 @@ const stamp = () => Date.now();
 /** Mark an item as changed now, so the newest edit wins when devices merge. */
 const touch = item => { item.updatedAt = stamp(); return item; };
 const tombstone = id => { db.deleted[id] = stamp(); };
+
+const COMPLETED_TTL = 2 * 86400000;   // finished homework clears itself after 2 days
+
+/** Quietly remove homework that's been checked off for more than two days.
+    Goes through the normal tombstone path so the removal syncs like any
+    other delete, instead of quietly reappearing on another device. */
+function sweepCompleted() {
+  const cutoff = stamp() - COMPLETED_TTL;
+  const stale = db.homework.filter(h => h.done && h.completedAt && h.completedAt <= cutoff);
+  if (!stale.length) return false;
+  for (const h of stale) tombstone(h.id);
+  const staleIds = new Set(stale.map(h => h.id));
+  db.homework = db.homework.filter(h => !staleIds.has(h.id));
+  return true;
+}
 
 /* ---------------- dates (local, no timezone math) ---------------- */
 
@@ -86,7 +111,7 @@ const esc = s => String(s ?? '').replace(/[&<>"']/g, c =>
 const COLORS = [
   '#2f6fed', '#4c8dff', '#12a594', '#3aa8c1', '#2fa86b', '#6fa83c',
   '#d9a01e', '#e8863c', '#e2694b', '#d94f5c', '#e0559a', '#c2569e',
-  '#a25ddc', '#7a5af8', '#5b6bd6', '#8a6f5a', '#6b7280', '#374151'
+  '#a25ddc', '#7a5af8', '#5b6bd6', '#8a6f5a', '#d3d7dc', '#6b7280', '#374151'
 ];
 const PROJECT_COLOR = '#7a5af8';
 const EVENT_COLOR = '#e0a13a';
@@ -1212,6 +1237,7 @@ document.addEventListener('click', e => {
       const h = byId(db.homework, el.dataset.id);
       if (!h) break;
       h.done = !h.done;
+      h.completedAt = h.done ? stamp() : undefined;   // starts the 2-day countdown to removal
       touch(h);
       save();
       render();
@@ -1400,6 +1426,7 @@ document.addEventListener('visibilitychange', () => {
     scheduleSync(0);            // hand off pending edits before the app is put away
     return;
   }
+  if (sweepCompleted()) { save(); render(); return; }
   if (state.tab === 'schedule' || state.tab === 'home') render();
   scheduleSync(300);            // and pick up whatever the other device did
   if (today() === openedOn) return;
@@ -1409,10 +1436,15 @@ document.addEventListener('visibilitychange', () => {
 });
 
 addEventListener('online', () => scheduleSync(500));
-setInterval(() => { if (document.visibilityState === 'visible') scheduleSync(0); }, 300000);
+setInterval(() => {
+  if (document.visibilityState !== 'visible') return;
+  if (sweepCompleted()) { save(); render(); }
+  scheduleSync(0);
+}, 300000);
 
 $('#syncBtn').addEventListener('click', openSyncSheet);
 
+if (sweepCompleted()) save();   // catches homework finished 2+ days before this launch
 render();
 showView();
 loadSync();

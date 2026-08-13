@@ -39,6 +39,12 @@ Screen**. It then launches standalone, without Safari's chrome, and works offlin
 
 - **New homework defaults to tomorrow.** If you're looking at a different day on
   the calendar, it defaults to that day instead.
+- **Checking homework off doesn't delete it.** It just marks it done; it stays
+  visible (crossed out) and quietly clears itself 2 days after you checked it,
+  so a finished item doesn't linger forever but you also get a couple of days
+  to undo a mistap. The removal is a real delete under the hood — it leaves a
+  tombstone like any other delete, so it disappears from every synced device,
+  not just the one you checked it off on.
 - **Everything dated shows on the calendar** as a small dot: homework and notes in
   their class colour, projects in purple, important dates in amber.
 - **Today's view** lists what's due today, anything overdue, and the next few
