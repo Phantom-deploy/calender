@@ -109,6 +109,14 @@ encrypt the data. The server stores a name it cannot reverse and a blob it
 cannot read. **The flip side: the code is the only key. Lose it on every device
 and the data is gone — there is no reset link.**
 
+**More than one person can share one deployment.** Every code is its own
+isolated record: a different code means a different record name (a hash the
+server can't reverse) and a different encryption key, so two people using the
+same app and the same worker can never see — or overwrite — each other's data.
+Someone who never turns sync on stays entirely local and sends nothing. Each
+record has its own write allowance so one misbehaving client can't spend the
+account's whole free-tier budget and take everyone else's sync down.
+
 Merging is per item, newest edit wins, with tombstones for deletions. Two
 devices can both work offline and neither loses anything when they reconnect;
 a delete on one device stays deleted instead of being resurrected by the other.

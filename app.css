@@ -1006,3 +1006,9 @@ main {
   grid-template-columns: 1fr 1fr;
   gap: 10px;
 }
+
+.sync-or {
+  text-align: center;
+  margin: 8px 4px 18px;
+  font-size: 13px;
+}

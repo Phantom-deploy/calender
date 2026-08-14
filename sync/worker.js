@@ -45,9 +45,21 @@ export default {
   }
 };
 
+/* Several people can share one deployment, each with their own code. A single
+   runaway client would otherwise be able to spend the whole account's daily
+   free-tier budget and take everyone else's sync down with it, so each record
+   gets its own modest write allowance. Reads are left alone: they are cheap
+   and a stuck client that can only read cannot corrupt anything. */
+const WRITE_WINDOW = 60_000;
+// A device debounces to at most ~24 writes a minute, so several devices editing
+// hard still sit far below this; a runaway loop does hundreds a second and is
+// caught immediately.
+const WRITES_PER_WINDOW = 120;
+
 export class SyncRecord {
   constructor(state) {
     this.state = state;
+    this.writes = [];
   }
 
   async fetch(request) {
@@ -55,6 +67,13 @@ export class SyncRecord {
       const rec = (await this.state.storage.get('rec')) || { rev: 0, blob: null };
       return json(rec);
     }
+
+    const now = Date.now();
+    this.writes = this.writes.filter(t => now - t < WRITE_WINDOW);
+    if (this.writes.length >= WRITES_PER_WINDOW) {
+      return json({ error: 'too many writes, try again shortly' }, 429);
+    }
+    this.writes.push(now);
 
     let body;
     try { body = await request.json(); } catch { return json({ error: 'bad body' }, 400); }

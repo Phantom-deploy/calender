@@ -1115,8 +1115,12 @@ async function syncNow() {
     saveSync();
     setStatus('ok');
   } catch (e) {
-    const wrongCode = e && (e.name === 'OperationError' || /operation-specific/i.test(e.message || ''));
-    setStatus('error', wrongCode ? 'That code does not match this data' : (e.message || 'Could not reach the server'));
+    const msg = (e && e.message) || '';
+    const wrongCode = e && (e.name === 'OperationError' || /operation-specific/i.test(msg));
+    setStatus('error',
+      wrongCode ? 'That code does not match this data'
+      : /429/.test(msg) ? 'Syncing too often — it will catch up shortly'
+      : msg || 'Could not reach the server');
   } finally {
     sync.busy = false;
   }
@@ -1173,22 +1177,23 @@ function openSyncSheet() {
   const on = !!sync.code;
   const body = on ? `
     <p class="sync-code" data-act="sync-copy" title="Tap to copy">${esc(sync.code)}</p>
-    <p class="hint">Enter this code on another device and both stay in step.</p>
+    <p class="hint">On your other device, open Sync and choose <b>I already have a code</b>,
+      then enter this. Anyone using this code sees this data, so keep it to yourself.</p>
     <p class="sync-status" id="syncStatus">${esc(syncLabel())}</p>
     <button class="btn" type="button" data-act="sync-now">Sync now</button>
     <button class="btn is-ghost" type="button" data-act="sync-off">Stop syncing on this device</button>`
   : `
-    <p class="hint">Sync keeps the same homework, notes and projects on every device you use.
+    <p class="hint">Keeps the same homework, notes and projects on every device you use.
       No account: one code is the key, and your data is encrypted before it leaves this device.</p>
     ${SYNC_URL ? '' : `<div class="field"><label for="f-url">Server</label>
       <input id="f-url" type="url" inputmode="url" autocapitalize="off" autocorrect="off"
         placeholder="https://…workers.dev" value="${esc(sync.url)}"></div>`}
-    <button class="btn" type="button" data-act="sync-start">Start syncing</button>
-    <p class="hint" style="text-align:center;margin:14px 4px 6px">or use a code from another device</p>
-    <div class="field">
+    <button class="btn" type="button" data-act="sync-start">Set up my first device</button>
+    <p class="hint sync-or">Makes a brand-new code just for you</p>
+    <div class="field"><label for="f-code">I already have a code</label>
       <input id="f-code" type="text" placeholder="XXXX-XXXX-XXXX" autocapitalize="characters"
         autocorrect="off" spellcheck="false" enterkeyhint="done"></div>
-    <button class="btn is-soft" type="button" data-act="sync-connect">Connect</button>`;
+    <button class="btn is-soft" type="button" data-act="sync-connect">Connect this device</button>`;
 
   openSheet(`
     <div class="sheet-head"><h2 id="sheetTitle">Sync</h2>
@@ -1426,8 +1431,9 @@ document.addEventListener('visibilitychange', () => {
     scheduleSync(0);            // hand off pending edits before the app is put away
     return;
   }
-  if (sweepCompleted()) { save(); render(); return; }
-  if (state.tab === 'schedule' || state.tab === 'home') render();
+  const swept = sweepCompleted();
+  if (swept) save();
+  if (swept || state.tab === 'schedule' || state.tab === 'home') render();
   scheduleSync(300);            // and pick up whatever the other device did
   if (today() === openedOn) return;
   if (state.selected === openedOn) state.selected = today();
@@ -1444,10 +1450,13 @@ setInterval(() => {
 
 $('#syncBtn').addEventListener('click', openSyncSheet);
 
+loadSync();
+// Must come after loadSync: save() marks the change as unsent, and that only
+// works once the sync code is loaded. Sweeping first would drop the flag and
+// leave the deletion sitting on this device.
 if (sweepCompleted()) save();   // catches homework finished 2+ days before this launch
 render();
 showView();
-loadSync();
 paintSync();
 if (sync.code) scheduleSync(400);
 
