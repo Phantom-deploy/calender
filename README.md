@@ -25,7 +25,7 @@ Screen**. It then launches standalone, without Safari's chrome, and works offlin
 
 | File | Purpose |
 | --- | --- |
-| `index.html` | Static shell: top bar, five views, tab bar, sheet container |
+| `index.html` | Static shell: top bar, five views, tab bar, sheet and lock layers |
 | `app.css` | All styling; light/dark via `[data-theme]` custom properties. Type is `ui-rounded` (SF Pro Rounded on iOS), a system font, so nothing downloads |
 | `app.js` | State, storage, rendering, and event handling |
 | `sw.js` | Offline cache of the app shell |
@@ -72,6 +72,36 @@ schedule), a big **Add homework** button with quick chips for a note, project or
 date, then two lists: **Do tonight** (due tomorrow) and **Still due** (due today
 or already late).
 
+## Focus
+
+A study session with the phone deliberately out of play. Pick the total focus
+time, how many breaks and how long each is, then start. The plan splits into
+equal stretches with the breaks in between, and the summary line spells out
+what you chose before you commit.
+
+Only the plan and the moment it started are stored, so both devices work out
+the same phase from the clock — a phone that was asleep is correct the instant
+it wakes, and nothing has to stream second by second. While a session is
+running devices check in every 15 seconds instead of the usual five minutes, so
+starting on a laptop locks the phone within moments.
+
+- **On a phone** the whole site becomes the session: solid red **DO NOT USE**
+  with the countdown and short reminders about staying off it, solid blue
+  **HAVE FUN** with a countdown during breaks. A soft chime sounds a minute
+  before a break ends and an alarm rings when it hits zero, cleared only by
+  holding **I WILL STUDY NOW** for three seconds so it can't be swatted away.
+- **On a computer** nothing is blocked. A strip along the bottom shows the
+  phase, the time left, and that the phone is locked.
+- There is a low-key **hold to end session** on the phone. A full-screen lock
+  with no way out is the wrong thing to ship for a real emergency; a
+  three-second hold is deliberate enough that no impulse check gets through.
+
+Sound is started by the tap that begins the session, which is what browsers
+require, and kept alive by a silent loop. The chime and alarm are scheduled on
+the audio clock rather than with timers, so they still fire when the page is in
+the background and JS is being throttled. iOS can still cut audio off in some
+states — treat background sound as best effort, not a guarantee.
+
 ## Schedule
 
 The Schedule tab shows today's bell schedule with a live countdown for the
@@ -79,7 +109,9 @@ period you're in — big at the top, with the class name you assigned rather tha
 "Period 3". Under it is the whole day, current block highlighted, finished ones
 dimmed.
 
-Assign your classes once under **My periods** (tap a period, pick a class — you
+Classes live here too, as one **Classes & periods** list: a period row opens
+that class's homework and notes, an empty one asks what to put there, and any
+class without a period sits underneath. Assign your classes once (tap a period, pick a class — you
 can create one right there, and optionally add a room and teacher). Periods 1–5
 are the same every day, so the app maps them onto whichever bell schedule the
 day happens to use.

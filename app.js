@@ -6,12 +6,12 @@
 /* ---------------- storage ---------------- */
 
 const KEY = 'planner.v1';
-const KINDS = ['classes', 'homework', 'notes', 'projects', 'events', 'schedule', 'overrides'];
+const KINDS = ['classes', 'homework', 'notes', 'projects', 'events', 'schedule', 'overrides', 'focus'];
 
 /* `deleted` holds tombstones (id -> time) so a delete on one device also
    removes the item on the others instead of being re-added by a merge. */
 const emptyDB = () => ({ classes: [], homework: [], notes: [], projects: [], events: [],
-  schedule: [], overrides: [], deleted: {} });
+  schedule: [], overrides: [], focus: [], deleted: {} });
 
 let saveTimer;              // declared before load() runs, since persist() below needs it
 let migratedOnLoad = false;
@@ -255,13 +255,13 @@ function blockMeta(period) {
 /* ---------------- rendering ---------------- */
 
 function render() {
-  const inClass = state.tab === 'classes' && state.classId;
+  const inClass = state.tab === 'schedule' && state.classId;
   $('#title').textContent =
     state.tab === 'home' ? homeTitle()
     : state.tab === 'calendar' ? `${MONTHS[state.month]} ${state.year}`
-    : state.tab === 'schedule' ? 'Schedule'
     : inClass ? className(state.classId)
-    : state.tab === 'classes' ? 'Classes' : 'Projects';
+    : state.tab === 'schedule' ? 'Schedule'
+    : state.tab === 'focus' ? 'Focus' : 'Projects';
 
   $('#prevMonth').hidden = $('#nextMonth').hidden = state.tab !== 'calendar';
 
@@ -270,9 +270,10 @@ function render() {
 
   if (state.tab === 'home') renderHome();
   else if (state.tab === 'calendar') renderCalendar();
-  else if (state.tab === 'schedule') renderSchedule();
-  else if (state.tab === 'classes') inClass ? renderClass() : renderClasses();
+  else if (state.tab === 'schedule') inClass ? renderClass() : renderSchedule();
+  else if (state.tab === 'focus') renderFocus();
   else renderProjects();
+  paintFocusBanner();
 }
 
 function renderCalendar() {
@@ -391,27 +392,9 @@ function rowHTML({ kind, item }, opts = {}) {
     </span>${CHEV}</button>`;
 }
 
-function renderClasses() {
-  const rows = db.classes.map(c => {
-    const open = db.homework.filter(h => h.classId === c.id && !h.done).length;
-    const notes = db.notes.filter(n => n.classId === c.id).length;
-    return `<button class="row" data-act="class" data-id="${c.id}">
-      <span class="swatch" style="background:${c.color}"></span>
-      <span class="row-main"><span class="row-title">${esc(c.name)}</span>
-        <span class="row-sub">${open} open · ${notes} note${notes === 1 ? '' : 's'}</span>
-      </span>${CHEV}</button>`;
-  }).join('');
-
-  $('#view-classes').innerHTML =
-    (rows ? `<div class="card top">${rows}</div>`
-          : `<p class="empty">No classes yet. Add one to start tracking homework and notes.</p>`) +
-    `<div class="card gap"><button class="row" data-act="new-class">${PLUS}
-      <span class="row-main"><span class="row-title accent">New Class</span></span></button></div>`;
-}
-
 function renderClass() {
   const c = byId(db.classes, state.classId);
-  if (!c) { state.classId = null; return renderClasses(); }
+  if (!c) { state.classId = null; return renderSchedule(); }
 
   const hw = db.homework.filter(h => h.classId === c.id)
     .sort((a, b) => (a.done === b.done ? (a.due < b.due ? -1 : 1) : a.done ? 1 : -1));
@@ -422,8 +405,9 @@ function renderClass() {
       <span class="row-main"><span class="note-body">${esc(n.text)}</span>
         <span class="row-sub">${dateLabel(n.date)}</span></span></button>`).join('');
 
-  $('#view-classes').innerHTML = `
-    <p class="back"><button class="link-btn" data-act="back">‹ Classes</button></p>
+  const slot = db.schedule.find(x => x.classId === c.id);
+  $('#view-schedule').innerHTML = `
+    <p class="back"><button class="link-btn" data-act="back">‹ Schedule</button></p>
     <section class="panel">
       <div class="panel-head"><h2>Homework</h2>
         <button class="link-btn" data-act="add" data-type="homework" data-class="${c.id}">Add</button></div>
@@ -434,9 +418,16 @@ function renderClass() {
         <button class="link-btn" data-act="add" data-type="note" data-class="${c.id}">Add</button></div>
       ${noteRows || `<p class="empty">No notes yet.</p>`}
     </section>
-    <div class="card gap-lg"><button class="row" data-act="edit-class" data-id="${c.id}">
-      <span class="swatch" style="background:${c.color}"></span>
-      <span class="row-main"><span class="row-title">Edit class</span></span>${CHEV}</button></div>`;
+    <div class="card gap-lg">
+      ${slot ? `<button class="row" data-act="period" data-period="${slot.period}">
+        <span class="block-time">P${slot.period}</span>
+        <span class="row-main"><span class="row-title">Period, room &amp; teacher</span>
+          ${blockMeta(slot.period) ? `<span class="row-sub">${esc(blockMeta(slot.period))}</span>` : ''}
+        </span>${CHEV}</button>` : ''}
+      <button class="row" data-act="edit-class" data-id="${c.id}">
+        <span class="swatch" style="background:${c.color}"></span>
+        <span class="row-main"><span class="row-title">Edit class</span></span>${CHEV}</button>
+    </div>`;
 }
 
 function renderProjects() {
@@ -595,11 +586,15 @@ function blocksHTML(pos) {
   }).join('');
 }
 
+/* Periods and classes are one section: a period row opens that class (its
+   homework and notes), an empty one asks which class to put there, and any
+   class without a period is listed underneath. */
 function periodsHTML() {
   const rows = [1, 2, 3, 4, 5].map(n => {
     const cls = periodClass(n);
     const meta = blockMeta(n);
-    return `<button class="row" data-act="period" data-period="${n}">
+    const open = cls ? `data-act="class" data-id="${cls.id}"` : `data-act="period" data-period="${n}"`;
+    return `<button class="row" ${open}>
       <span class="block-time">P${n}</span>
       <span class="row-main">
         <span class="row-title${cls ? '' : ' is-muted'}">${cls ? esc(cls.name) : 'Add a class'}</span>
@@ -607,7 +602,22 @@ function periodsHTML() {
       </span>
       ${cls ? `<span class="swatch" style="background:${cls.color}"></span>` : ''}${CHEV}</button>`;
   }).join('');
-  return `<div class="section-head"><h2>My periods</h2></div><div class="card">${rows}</div>`;
+
+  const placed = new Set(db.schedule.map(x => x.classId));
+  const spare = db.classes.filter(c => !placed.has(c.id)).map(c => {
+    const hw = db.homework.filter(h => h.classId === c.id && !h.done).length;
+    return `<button class="row" data-act="class" data-id="${c.id}">
+      <span class="block-time">—</span>
+      <span class="row-main"><span class="row-title">${esc(c.name)}</span>
+        <span class="row-sub">${hw} open</span></span>
+      <span class="swatch" style="background:${c.color}"></span>${CHEV}</button>`;
+  }).join('');
+
+  return `<div class="section-head"><h2>Classes &amp; periods</h2></div>
+    <div class="card">${rows}${spare}
+      <button class="row" data-act="new-class">${PLUS}
+        <span class="row-main"><span class="row-title accent">New class</span></span></button>
+    </div>`;
 }
 
 /** Update the countdown in place every second; redraw fully when the block changes. */
@@ -961,6 +971,344 @@ function removeItem() {
   commit();
 }
 
+
+/* ---------------- focus sessions ----------------
+   Only the plan and the moment it started are stored, so every device derives
+   the same phase from the wall clock. Nothing needs to stream second by
+   second — a device that learns about the session once stays in step on its
+   own, and a phone that was asleep catches up the instant it wakes. */
+
+const FOCUS_ID = 'session';
+const DEFAULT_PLAN = { totalMs: 60 * 60000, breaks: 2, breakMs: 10 * 60000 };
+const REMINDER_LEAD = 60000;          // soft chime one minute before a break ends
+
+const focusPresets = {
+  total: [25, 45, 60, 90, 120],
+  breaks: [0, 1, 2, 3, 4],
+  breakLen: [5, 10, 15]
+};
+
+const session = () => byId(db.focus, FOCUS_ID);
+
+/** The plan to start next: whatever was used last, else a sensible default. */
+function focusPlan() {
+  const s = session();
+  return s ? { totalMs: s.totalMs, breaks: s.breaks, breakMs: s.breakMs } : { ...DEFAULT_PLAN };
+}
+
+const focusSpan = s => s.totalMs + s.breaks * s.breakMs;
+
+/** Where a session is right now: a study stretch, a break, or finished. */
+function focusPhase(s, now) {
+  if (!s || !s.startedAt) return { kind: 'idle' };
+  if (s.endedAt) return { kind: 'idle' };
+  let t = now - s.startedAt;
+  if (t < 0) t = 0;
+  if (t >= focusSpan(s)) return { kind: 'done', endsAt: s.startedAt + focusSpan(s) };
+
+  const segMs = s.totalMs / (s.breaks + 1);
+  for (let i = 0; i <= s.breaks; i++) {
+    if (t < segMs) {
+      return { kind: 'focus', index: i, of: s.breaks + 1, left: segMs - t, total: segMs,
+               endsAt: now + (segMs - t) };
+    }
+    t -= segMs;
+    if (i < s.breaks) {
+      if (t < s.breakMs) {
+        return { kind: 'break', index: i, of: s.breaks, left: s.breakMs - t, total: s.breakMs,
+                 endsAt: now + (s.breakMs - t) };
+      }
+      t -= s.breakMs;
+    }
+  }
+  return { kind: 'done', endsAt: s.startedAt + focusSpan(s) };
+}
+
+const focusActive = () => {
+  const s = session();
+  return !!s && !s.endedAt && Date.now() < s.startedAt + focusSpan(s);
+};
+
+/* A phone gets the restriction screen; anything with a real pointer or a wide
+   window carries on as normal. Nothing to configure — it just reads the
+   device it is running on. */
+const isPhone = () => matchMedia('(max-width: 820px)').matches && matchMedia('(pointer: coarse)').matches;
+
+function startFocus(plan) {
+  const now = stamp();
+  const data = { startedAt: now, totalMs: plan.totalMs, breaks: plan.breaks, breakMs: plan.breakMs, endedAt: null };
+  const s = session();
+  if (s) touch(Object.assign(s, data));
+  else db.focus.push(touch({ id: FOCUS_ID, ...data }));
+  alarmDismissed = -1;
+  audioUnlock();
+  save();
+  render();
+}
+
+function endFocus() {
+  const s = session();
+  if (!s) return;
+  touch(Object.assign(s, { endedAt: stamp() }));
+  stopAlarm();
+  audioRelease();
+  save();
+  render();
+}
+
+/* ---------------- sound ----------------
+   Started from the tap that begins a session, so it counts as user-initiated
+   audio. A silent loop keeps the output alive while the phone is idle, and
+   the chime and alarm are scheduled on the audio clock rather than with
+   setTimeout, so they still fire when the page is backgrounded and JS timers
+   are being throttled. */
+
+let actx = null, keepAlive = null, alarmNodes = [], alarmOn = false, alarmDismissed = -1;
+
+function audioUnlock() {
+  try {
+    if (!actx) actx = new (window.AudioContext || window.webkitAudioContext)();
+    if (actx.state === 'suspended') actx.resume();
+    if (!keepAlive) {
+      const osc = actx.createOscillator();
+      const gain = actx.createGain();
+      gain.gain.value = 0.0001;              // inaudible, but keeps the output open
+      osc.frequency.value = 40;
+      osc.connect(gain).connect(actx.destination);
+      osc.start();
+      keepAlive = { osc, gain };
+    }
+    silentLoop();
+  } catch {}
+}
+
+/** iOS keeps a page's audio running in the background while a media element is
+    playing, so a looping silent clip buys us the alarm later on. */
+function silentLoop() {
+  let el = $('#silence');
+  if (!el) {
+    el = document.createElement('audio');
+    el.id = 'silence';
+    el.loop = true;
+    el.setAttribute('playsinline', '');
+    // 0.1s of silence
+    el.src = 'data:audio/wav;base64,UklGRiQAAABXQVZFZm10IBAAAAABAAEAgD4AAAB9AAACABAAZGF0YQAAAAA=';
+    document.body.appendChild(el);
+  }
+  el.play().catch(() => {});
+}
+
+function audioRelease() {
+  $('#silence')?.pause();
+}
+
+function beep(at, freq, ms, vol = 0.22) {
+  if (!actx) return null;
+  const osc = actx.createOscillator();
+  const gain = actx.createGain();
+  osc.frequency.value = freq;
+  osc.type = 'sine';
+  gain.gain.setValueAtTime(0, at);
+  gain.gain.linearRampToValueAtTime(vol, at + 0.02);
+  gain.gain.setValueAtTime(vol, at + ms / 1000 - 0.05);
+  gain.gain.linearRampToValueAtTime(0, at + ms / 1000);
+  osc.connect(gain).connect(actx.destination);
+  osc.start(at);
+  osc.stop(at + ms / 1000 + 0.02);
+  return osc;
+}
+
+/** Two soft notes, a minute before the break ends. */
+function playReminder(inMs) {
+  if (!actx) return;
+  const at = actx.currentTime + Math.max(0, inMs) / 1000;
+  beep(at, 660, 260, 0.16);
+  beep(at + 0.32, 880, 320, 0.16);
+}
+
+/** Insistent, and pre-scheduled so it rings even if this tab is frozen. */
+function startAlarm(inMs = 0) {
+  if (!actx || alarmOn) return;
+  alarmOn = true;
+  const base = actx.currentTime + Math.max(0, inMs) / 1000;
+  for (let i = 0; i < 300; i++) {           // ~10 minutes of ringing
+    const at = base + i * 2;
+    alarmNodes.push(beep(at, 880, 220, 0.3), beep(at + 0.3, 990, 220, 0.3), beep(at + 0.6, 880, 260, 0.3));
+  }
+}
+
+function stopAlarm() {
+  alarmOn = false;
+  for (const n of alarmNodes) { try { n && n.stop(); } catch {} }
+  alarmNodes = [];
+}
+
+
+/* ---------------- focus screens ---------------- */
+
+const mmss = ms => {
+  const t = Math.max(0, Math.ceil(ms / 1000));
+  const h = Math.floor(t / 3600), m = Math.floor(t / 60) % 60, sec = t % 60;
+  return h ? `${h}:${pad(m)}:${pad(sec)}` : `${m}:${pad(sec)}`;
+};
+
+const LOCK_LINES = [
+  'Stay with what you are working on right now.',
+  'Beat the urge to check your phone.',
+  'Keep going until the timer ends.',
+  'You can check it when the session is over.'
+];
+
+function renderFocus() {
+  const s = session();
+  const phase = focusPhase(s, Date.now());
+  const plan = focusPlan();
+
+  if (focusActive()) {
+    const label = phase.kind === 'break'
+      ? `Break ${phase.index + 1} of ${phase.of}`
+      : `Stretch ${phase.index + 1} of ${phase.of}`;
+    $('#view-focus').innerHTML = `
+      <div class="hero ${phase.kind === 'break' ? 'is-break' : 'is-live'}">
+        <div class="hero-label">${label}</div>
+        <div class="hero-title">${phase.kind === 'break' ? 'Break' : 'Focus'}</div>
+        <div class="hero-time">${mmss(phase.left)}</div>
+        <div class="hero-sub">left · session ends ${clockOf(s.startedAt + focusSpan(s))}</div>
+        <span class="hero-bar"><span style="width:${Math.round((1 - phase.left / phase.total) * 100)}%"></span></span>
+      </div>
+      <p class="hint focus-note">Your phone is showing the ${phase.kind === 'break' ? 'break' : 'restriction'} screen.
+        This computer keeps working normally.</p>
+      <button class="btn is-ghost" data-act="focus-end">End session</button>`;
+    return;
+  }
+
+  const chips = (name, values, current, unit) => values.map(v =>
+    `<button class="chip${v === current ? ' is-on' : ''}" data-act="focus-set" data-field="${name}" data-value="${v}">${v}${unit}</button>`).join('');
+
+  $('#view-focus').innerHTML = `
+    <p class="hint focus-intro">Pick how long you are studying, then start. Your phone locks
+      itself for the session and lets you out on the breaks.</p>
+    <section class="panel">
+      <div class="panel-head"><h2>Total focus time</h2></div>
+      <div class="chips wrap">${chips('total', focusPresets.total, plan.totalMs / 60000, 'm')}</div>
+      <div class="panel-head"><h2>Breaks</h2></div>
+      <div class="chips wrap">${chips('breaks', focusPresets.breaks, plan.breaks, '')}</div>
+      ${plan.breaks ? `<div class="panel-head"><h2>Each break</h2></div>
+      <div class="chips wrap">${chips('breakLen', focusPresets.breakLen, plan.breakMs / 60000, 'm')}</div>` : ''}
+    </section>
+    <p class="focus-summary">${focusSummary(plan)}</p>
+    <button class="btn" data-act="focus-start">Start focus</button>`;
+}
+
+function focusSummary(p) {
+  const seg = Math.round(p.totalMs / (p.breaks + 1) / 60000);
+  const span = Math.round((p.totalMs + p.breaks * p.breakMs) / 60000);
+  return p.breaks
+    ? `${p.breaks + 1} stretches of ${seg} min, ${p.breaks} break${p.breaks > 1 ? 's' : ''} of ${p.breakMs / 60000} min · ${span} min in all`
+    : `One stretch of ${seg} min`;
+}
+
+const clockOf = ms => new Date(ms).toLocaleTimeString(undefined, { hour: 'numeric', minute: '2-digit' });
+
+/** The full-screen phone states. Nothing else on the page is reachable. */
+function paintLock() {
+  const lock = $('#lock');
+  const s = session();
+  const phase = focusPhase(s, Date.now());
+  const show = focusActive() && isPhone();
+
+  if (!show) {
+    if (!lock.hidden) { lock.hidden = true; lock.innerHTML = ''; document.body.classList.remove('is-locked'); }
+    return;
+  }
+
+  const ringing = phase.kind === 'focus' && phase.index > 0 && alarmDismissed < phase.index;
+  const mode = ringing ? 'alarm' : phase.kind;
+
+  if (lock.dataset.mode !== mode) {
+    lock.dataset.mode = mode;
+    lock.className = `lock is-${mode}`;
+    lock.innerHTML = mode === 'break' ? `
+        <div class="lock-label">Break ${phase.index + 1} of ${phase.of}</div>
+        <div class="lock-big">HAVE FUN</div>
+        <div class="lock-time" id="lockTime">${mmss(phase.left)}</div>
+        <div class="lock-note">Back to it when this hits zero.</div>`
+      : mode === 'alarm' ? `
+        <div class="lock-big">TIME'S UP</div>
+        <div class="lock-note">Hold the button to stop the alarm and start studying.</div>
+        <button class="hold" data-act="hold-study"><span class="hold-fill"></span>
+          <span class="hold-text">I WILL STUDY NOW</span></button>`
+      : `
+        <div class="lock-label">Stretch ${phase.index + 1} of ${phase.of}</div>
+        <div class="lock-big">DO NOT USE</div>
+        <div class="lock-time" id="lockTime">${mmss(phase.left)}</div>
+        <ul class="lock-lines">${LOCK_LINES.map(l => `<li>${l}</li>`).join('')}</ul>
+        <button class="lock-out" data-act="hold-end"><span class="hold-fill"></span>
+          <span class="hold-text">Hold to end session</span></button>`;
+    lock.hidden = false;
+    document.body.classList.add('is-locked');
+  } else {
+    const t = $('#lockTime');
+    if (t) t.textContent = mmss(phase.left);
+  }
+}
+
+/** A quiet strip on the computer so it is obvious a session is running. */
+function paintFocusBanner() {
+  let bar = $('#focusBar');
+  const on = focusActive() && !isPhone();
+  if (!on) { bar?.remove(); document.body.classList.remove('has-focusbar'); return; }
+  const phase = focusPhase(session(), Date.now());
+  if (!bar) {
+    bar = document.createElement('button');
+    bar.id = 'focusBar';
+    bar.className = 'focus-bar';
+    bar.dataset.act = 'tab';
+    bar.dataset.to = 'focus';
+    document.body.appendChild(bar);
+  }
+  bar.classList.toggle('is-break', phase.kind === 'break');
+  bar.innerHTML = `<span class="dot"></span>
+    <span>${phase.kind === 'break' ? 'Break' : 'Focus'} · ${mmss(phase.left)} left</span>
+    <span class="focus-bar-note">${phase.kind === 'break' ? 'phone is on break' : 'phone is locked'}</span>`;
+  document.body.classList.add('has-focusbar');
+}
+
+/* One clock drives the whole thing: it repaints the lock screen, keeps the
+   banner honest, and fires the chime and alarm at the right moments. */
+let focusWatch = null, lastPhaseKey = '';
+
+function focusTick() {
+  const s = session();
+  if (!focusActive()) {
+    if (lastPhaseKey) { lastPhaseKey = ''; stopAlarm(); render(); }
+    paintLock(); paintFocusBanner();
+    return;
+  }
+  const phase = focusPhase(s, Date.now());
+  const key = phase.kind + phase.index;
+
+  if (key !== lastPhaseKey) {
+    lastPhaseKey = key;
+    if (phase.kind === 'break') {
+      // both are pinned to the audio clock now, so a sleeping tab still rings
+      playReminder(phase.left - REMINDER_LEAD);
+      startAlarm(phase.left);
+    }
+    if (state.tab === 'focus') renderFocus();
+  }
+  paintLock();
+  paintFocusBanner();
+  if (state.tab === 'focus' && !isPhone()) {
+    const t = $('#view-focus .hero-time');
+    if (t) t.textContent = mmss(phase.left);
+  }
+}
+
+function startFocusWatch() {
+  if (!focusWatch) focusWatch = setInterval(focusTick, 1000);
+}
+
 /* ---------------- sync ----------------
    No account: one shared code is the identity *and* the encryption key.
    The code never leaves the device — the server sees a hash of it for the
@@ -1217,6 +1565,45 @@ async function startSync(code) {
   openSyncSheet();
 }
 
+
+/* Press and hold, so the alarm can't be swatted away half-asleep. */
+const HOLD_MS = 3000;
+let holdTimer = null;
+
+function beginHold(btn, done) {
+  cancelHold();
+  btn.classList.add('is-holding');
+  holdTimer = setTimeout(() => { btn.classList.remove('is-holding'); holdTimer = null; done(); }, HOLD_MS);
+}
+
+function cancelHold() {
+  if (holdTimer) { clearTimeout(holdTimer); holdTimer = null; }
+  for (const b of document.querySelectorAll('.is-holding')) b.classList.remove('is-holding');
+}
+
+for (const ev of ['pointerdown']) {
+  document.addEventListener(ev, e => {
+    const btn = e.target.closest('[data-act="hold-study"], [data-act="hold-end"]');
+    if (!btn) return;
+    e.preventDefault();
+    const act = btn.dataset.act;
+    beginHold(btn, () => {
+      if (act === 'hold-study') {
+        const phase = focusPhase(session(), Date.now());
+        alarmDismissed = phase.kind === 'focus' ? phase.index : alarmDismissed;
+        stopAlarm();
+        $('#lock').dataset.mode = '';        // force a repaint into the study screen
+        paintLock();
+      } else {
+        endFocus();
+      }
+    });
+  }, { passive: false });
+}
+for (const ev of ['pointerup', 'pointercancel', 'pointerleave']) {
+  document.addEventListener(ev, cancelHold);
+}
+
 /* ---------------- events ---------------- */
 
 document.addEventListener('click', e => {
@@ -1251,7 +1638,7 @@ document.addEventListener('click', e => {
     }
 
     case 'open': openEdit(el.dataset.kind, el.dataset.id); break;
-    case 'class': state.classId = el.dataset.id; render(); scrollTo(0, 0); showView(); break;
+    case 'class': state.tab = 'schedule'; state.classId = el.dataset.id; render(); scrollTo(0, 0); showView(); break;
     case 'back': state.classId = null; render(); showView(); break;
     case 'new-class': openClassSheet(null); break;
     case 'edit-class': openClassSheet(el.dataset.id); break;
@@ -1301,6 +1688,23 @@ document.addEventListener('click', e => {
       scrollTo(0, 0);
       showView();
       break;
+
+    case 'focus-set': {
+      const plan = focusPlan();
+      const v = +el.dataset.value;
+      if (el.dataset.field === 'total') plan.totalMs = v * 60000;
+      if (el.dataset.field === 'breaks') plan.breaks = v;
+      if (el.dataset.field === 'breakLen') plan.breakMs = v * 60000;
+      const s = session();
+      if (s) touch(Object.assign(s, plan));
+      else db.focus.push(touch({ id: FOCUS_ID, startedAt: 0, endedAt: null, ...plan }));
+      save();
+      renderFocus();
+      break;
+    }
+
+    case 'focus-start': startFocus(focusPlan()); break;
+    case 'focus-end': endFocus(); break;
 
     case 'sync': openSyncSheet(); break;
     case 'sync-start': startSync(newCode()); break;
@@ -1379,7 +1783,7 @@ $('#title').addEventListener('click', () => {
 
 for (const t of document.querySelectorAll('.tab')) {
   t.addEventListener('click', () => {
-    if (state.tab === t.dataset.tab && t.dataset.tab === 'classes') state.classId = null;
+    if (t.dataset.tab === 'schedule') state.classId = null;   // tapping Schedule leaves a class
     state.tab = t.dataset.tab;
     if (state.tab !== 'schedule' && state.tab !== 'home') stopTick();
     render();
@@ -1448,6 +1852,13 @@ setInterval(() => {
   scheduleSync(0);
 }, 300000);
 
+/* While a session is running (or being set up) the other device should hear
+   about it in seconds, not on the lazy five-minute cycle. */
+setInterval(() => {
+  if (document.visibilityState !== 'visible') return;
+  if (focusActive() || state.tab === 'focus') scheduleSync(0);
+}, 15000);
+
 $('#syncBtn').addEventListener('click', openSyncSheet);
 
 loadSync();
@@ -1459,6 +1870,8 @@ render();
 showView();
 paintSync();
 if (sync.code) scheduleSync(400);
+startFocusWatch();
+focusTick();
 
 if ('serviceWorker' in navigator && location.protocol.startsWith('http')) {
   addEventListener('load', () => navigator.serviceWorker.register('sw.js').catch(() => {}));

@@ -921,6 +921,8 @@ main {
   padding: 14px 16px 8px;
 }
 
+.panel .chips.wrap + .panel-head { padding-top: 6px; }
+
 .panel-head h2 {
   margin: 0;
   font-size: 12.5px;
@@ -1011,4 +1013,172 @@ main {
   text-align: center;
   margin: 8px 4px 18px;
   font-size: 13px;
+}
+
+/* ---------- Focus ---------- */
+.focus-intro { margin-top: 16px; }
+.focus-note { margin-top: 16px; text-align: center; }
+
+.chips.wrap {
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: 0;
+  padding: 0 14px 14px;
+}
+
+/* share the row evenly so a set of five never spills onto a second line */
+.chips.wrap .chip {
+  flex: 1 1 0;
+  min-width: 0;
+  min-height: 44px;
+  padding: 0 4px;
+  font-size: 14px;
+  box-shadow: inset 0 0 0 1px var(--line);
+}
+.chip.is-on {
+  background: var(--accent);
+  color: var(--on-accent);
+  box-shadow: var(--shadow-pill);
+  font-weight: 700;
+}
+
+.focus-summary {
+  margin: 16px 6px 12px;
+  text-align: center;
+  font-size: 14.5px;
+  color: var(--muted);
+  line-height: 1.5;
+}
+
+.hero.is-break { background: color-mix(in srgb, #2563eb 14%, var(--surface)); }
+
+/* the strip that tells a computer a session is running */
+.focus-bar {
+  position: fixed;
+  left: 50%;
+  transform: translateX(-50%);
+  bottom: calc(var(--tabbar-h) + var(--safe-bottom) + 12px);
+  z-index: 25;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  max-width: 92vw;
+  padding: 11px 18px;
+  border-radius: 999px;
+  background: #1c2333;
+  color: #fff;
+  font-size: 14.5px;
+  font-weight: 600;
+  box-shadow: 0 12px 30px -10px rgba(10, 14, 25, .6);
+}
+
+.focus-bar.is-break { background: #1d4ed8; }
+.focus-bar .dot {
+  width: 9px; height: 9px; border-radius: 50%;
+  background: #ff6b6b;
+  animation: breathe 1.8s ease-in-out infinite;
+}
+.focus-bar.is-break .dot { background: #93c5fd; }
+.focus-bar-note { font-weight: 450; opacity: .75; }
+@media (max-width: 380px) { .focus-bar-note { display: none; } }
+
+/* ---------- The phone's full-screen states ---------- */
+.lock {
+  position: fixed;
+  inset: 0;
+  z-index: 60;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 14px;
+  padding: calc(28px + var(--safe-top)) 26px calc(28px + var(--safe-bottom));
+  text-align: center;
+  color: #fff;
+  overflow: hidden;
+}
+
+.lock[hidden] { display: none; }
+.lock.is-focus { background: #c81e1e; }
+.lock.is-alarm { background: #b31212; }
+.lock.is-break { background: #1d4ed8; }
+
+.lock-label {
+  font-size: 13px;
+  font-weight: 700;
+  letter-spacing: .12em;
+  text-transform: uppercase;
+  opacity: .75;
+}
+
+.lock-big {
+  font-size: clamp(40px, 13vw, 68px);
+  font-weight: 800;
+  letter-spacing: -0.03em;
+  line-height: 1;
+}
+
+.lock-time {
+  font-size: clamp(52px, 17vw, 84px);
+  font-weight: 750;
+  line-height: 1;
+  font-variant-numeric: tabular-nums;
+}
+
+.lock-note { font-size: 15.5px; opacity: .85; max-width: 22em; line-height: 1.5; }
+
+.lock-lines {
+  list-style: none;
+  margin: 6px 0 0;
+  padding: 0;
+  display: grid;
+  gap: 8px;
+  max-width: 22em;
+}
+
+.lock-lines li { font-size: 16px; line-height: 1.4; opacity: .92; }
+
+/* hold-to-confirm, with the fill showing progress */
+.hold, .lock-out {
+  position: relative;
+  overflow: hidden;
+  margin-top: 10px;
+  border-radius: 999px;
+  color: #fff;
+  font-weight: 750;
+  letter-spacing: .02em;
+  -webkit-user-select: none;
+  user-select: none;
+  touch-action: none;
+}
+
+.hold {
+  width: min(320px, 88vw);
+  min-height: 60px;
+  font-size: 17px;
+  background: rgba(255, 255, 255, .16);
+  box-shadow: inset 0 0 0 2px rgba(255, 255, 255, .5);
+}
+
+.lock-out {
+  min-height: 42px;
+  padding: 0 18px;
+  font-size: 13.5px;
+  font-weight: 600;
+  opacity: .6;
+  background: rgba(0, 0, 0, .18);
+}
+
+.hold-fill {
+  position: absolute;
+  inset: 0;
+  width: 0;
+  background: rgba(255, 255, 255, .34);
+}
+
+.is-holding .hold-fill { width: 100%; transition: width 3s linear; }
+.hold-text { position: relative; }
+
+@media (prefers-reduced-motion: reduce) {
+  .is-holding .hold-fill { transition: width 3s linear !important; }
 }
