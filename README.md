@@ -85,16 +85,23 @@ it wakes, and nothing has to stream second by second. While a session is
 running devices check in every 15 seconds instead of the usual five minutes, so
 starting on a laptop locks the phone within moments.
 
+Setup is three **− value +** controls, and every value can be typed directly:
+focus time, number of breaks, break length (30 / 2 / 5 to begin with). A line
+underneath reads back what you picked — *30 min focus → 2 breaks → 5 min each*.
+Out-of-range numbers are clamped rather than refused.
+
 - **On a phone** the whole site becomes the session: solid red **DO NOT USE**
-  with the countdown and short reminders about staying off it, solid blue
-  **HAVE FUN** with a countdown during breaks. A soft chime sounds a minute
-  before a break ends and an alarm rings when it hits zero, cleared only by
-  holding **I WILL STUDY NOW** for three seconds so it can't be swatted away.
-- **On a computer** nothing is blocked. A strip along the bottom shows the
+  with the countdown, and solid blue **HAVE FUN** with a countdown during
+  breaks. One reminder sentence shows at a time, fading to the next every
+  fifteen seconds, so the screen stays calm instead of listing four at once. A
+  soft chime sounds a minute before a break ends and an alarm rings when it
+  hits zero, cleared only by holding **I WILL STUDY NOW** for three seconds.
+- **On a computer** nothing is blocked. A strip above the tab bar shows the
   phase, the time left, and that the phone is locked.
-- There is a low-key **hold to end session** on the phone. A full-screen lock
-  with no way out is the wrong thing to ship for a real emergency; a
-  three-second hold is deliberate enough that no impulse check gets through.
+- **Getting out depends on where the session began.** Started on the phone: a
+  faint *hold to end* sits at the bottom of the lock, and it takes a full five
+  seconds. Started on the computer: there is no exit anywhere, on either
+  device — it runs until the timer does. Choose the length with that in mind.
 
 Sound is started by the tap that begins the session, which is what browsers
 require, and kept alive by a silent loop. The chime and alarm are scheduled on

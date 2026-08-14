@@ -979,14 +979,11 @@ function removeItem() {
    own, and a phone that was asleep catches up the instant it wakes. */
 
 const FOCUS_ID = 'session';
-const DEFAULT_PLAN = { totalMs: 60 * 60000, breaks: 2, breakMs: 10 * 60000 };
+const DEFAULT_PLAN = { totalMs: 30 * 60000, breaks: 2, breakMs: 5 * 60000 };
 const REMINDER_LEAD = 60000;          // soft chime one minute before a break ends
 
-const focusPresets = {
-  total: [25, 45, 60, 90, 120],
-  breaks: [0, 1, 2, 3, 4],
-  breakLen: [5, 10, 15]
-};
+/* field -> [step, smallest, largest] for the − value + controls */
+const FOCUS_LIMITS = { total: [5, 5, 240], breaks: [1, 0, 8], breakLen: [1, 1, 60] };
 
 const session = () => byId(db.focus, FOCUS_ID);
 
@@ -1034,9 +1031,18 @@ const focusActive = () => {
    device it is running on. */
 const isPhone = () => matchMedia('(max-width: 820px)').matches && matchMedia('(pointer: coarse)').matches;
 
+/* A session begun on the computer has no way out anywhere: the point is that
+   it cannot be talked out of. One begun on the phone can be ended from the
+   phone, and only by holding the button down. */
+function canExitHere() {
+  const s = session();
+  return !!s && s.startedOn === 'phone' && isPhone();
+}
+
 function startFocus(plan) {
   const now = stamp();
-  const data = { startedAt: now, totalMs: plan.totalMs, breaks: plan.breaks, breakMs: plan.breakMs, endedAt: null };
+  const data = { startedAt: now, totalMs: plan.totalMs, breaks: plan.breaks, breakMs: plan.breakMs,
+                 startedOn: isPhone() ? 'phone' : 'computer', endedAt: null };
   const s = session();
   if (s) touch(Object.assign(s, data));
   else db.focus.push(touch({ id: FOCUS_ID, ...data }));
@@ -1054,6 +1060,7 @@ function endFocus() {
   audioRelease();
   save();
   render();
+  paintLock();      // drop the lock now rather than on the next tick
 }
 
 /* ---------------- sound ----------------
@@ -1169,44 +1176,64 @@ function renderFocus() {
       ? `Break ${phase.index + 1} of ${phase.of}`
       : `Stretch ${phase.index + 1} of ${phase.of}`;
     $('#view-focus').innerHTML = `
-      <div class="hero ${phase.kind === 'break' ? 'is-break' : 'is-live'}">
-        <div class="hero-label">${label}</div>
-        <div class="hero-title">${phase.kind === 'break' ? 'Break' : 'Focus'}</div>
-        <div class="hero-time">${mmss(phase.left)}</div>
-        <div class="hero-sub">left · session ends ${clockOf(s.startedAt + focusSpan(s))}</div>
-        <span class="hero-bar"><span style="width:${Math.round((1 - phase.left / phase.total) * 100)}%"></span></span>
-      </div>
-      <p class="hint focus-note">Your phone is showing the ${phase.kind === 'break' ? 'break' : 'restriction'} screen.
-        This computer keeps working normally.</p>
-      <button class="btn is-ghost" data-act="focus-end">End session</button>`;
+      <div class="calm ${phase.kind === 'break' ? 'is-break' : ''}">
+        <p class="calm-label">${label}</p>
+        <p class="calm-time">${mmss(phase.left)}</p>
+        <p class="calm-note">${phase.kind === 'break'
+          ? 'Break — your phone is free until this runs out.'
+          : 'Your phone is put away. Keep going.'}</p>
+        <span class="calm-bar"><span style="width:${Math.round((1 - phase.left / phase.total) * 100)}%"></span></span>
+      </div>`;
     return;
   }
 
-  const chips = (name, values, current, unit) => values.map(v =>
-    `<button class="chip${v === current ? ' is-on' : ''}" data-act="focus-set" data-field="${name}" data-value="${v}">${v}${unit}</button>`).join('');
+  const step = (field, label, value, unit) => `
+    <div class="step">
+      <span class="step-label">${label}</span>
+      <div class="step-row">
+        <button class="step-btn" data-act="focus-step" data-field="${field}" data-dir="-1" aria-label="Less ${label}">−</button>
+        <span class="step-value">
+          <input class="step-input" type="text" inputmode="numeric" data-field="${field}"
+            value="${value}" aria-label="${label}">${unit ? `<span class="step-unit">${unit}</span>` : ''}
+        </span>
+        <button class="step-btn" data-act="focus-step" data-field="${field}" data-dir="1" aria-label="More ${label}">+</button>
+      </div>
+    </div>`;
 
   $('#view-focus').innerHTML = `
-    <p class="hint focus-intro">Pick how long you are studying, then start. Your phone locks
-      itself for the session and lets you out on the breaks.</p>
-    <section class="panel">
-      <div class="panel-head"><h2>Total focus time</h2></div>
-      <div class="chips wrap">${chips('total', focusPresets.total, plan.totalMs / 60000, 'm')}</div>
-      <div class="panel-head"><h2>Breaks</h2></div>
-      <div class="chips wrap">${chips('breaks', focusPresets.breaks, plan.breaks, '')}</div>
-      ${plan.breaks ? `<div class="panel-head"><h2>Each break</h2></div>
-      <div class="chips wrap">${chips('breakLen', focusPresets.breakLen, plan.breakMs / 60000, 'm')}</div>` : ''}
-    </section>
-    <p class="focus-summary">${focusSummary(plan)}</p>
-    <button class="btn" data-act="focus-start">Start focus</button>`;
+    <div class="focus-setup">
+      ${step('total', 'Focus time', plan.totalMs / 60000, 'min')}
+      ${step('breaks', 'Breaks', plan.breaks, '')}
+      ${plan.breaks ? step('breakLen', 'Break length', plan.breakMs / 60000, 'min') : ''}
+      <p class="focus-summary">${focusSummary(plan)}</p>
+      <button class="btn" data-act="focus-start">Start focus</button>
+    </div>`;
 }
 
 function focusSummary(p) {
-  const seg = Math.round(p.totalMs / (p.breaks + 1) / 60000);
-  const span = Math.round((p.totalMs + p.breaks * p.breakMs) / 60000);
+  const mins = p.totalMs / 60000;
   return p.breaks
-    ? `${p.breaks + 1} stretches of ${seg} min, ${p.breaks} break${p.breaks > 1 ? 's' : ''} of ${p.breakMs / 60000} min · ${span} min in all`
-    : `One stretch of ${seg} min`;
+    ? `${mins} min focus → ${p.breaks} break${p.breaks > 1 ? 's' : ''} → ${p.breakMs / 60000} min each`
+    : `${mins} min focus, no breaks`;
 }
+
+/** Write one field back into the stored plan, clamped to something sensible. */
+function setFocusField(field, minutes) {
+  const [, low, high] = FOCUS_LIMITS[field];
+  const v = Math.min(high, Math.max(low, minutes));
+  const plan = focusPlan();
+  if (field === 'total') plan.totalMs = v * 60000;
+  if (field === 'breaks') plan.breaks = v;
+  if (field === 'breakLen') plan.breakMs = v * 60000;
+  const s = session();
+  if (s) touch(Object.assign(s, plan));
+  else db.focus.push(touch({ id: FOCUS_ID, startedAt: 0, endedAt: null, ...plan }));
+  save();
+  return v;
+}
+
+const fieldValue = (field, plan) =>
+  field === 'total' ? plan.totalMs / 60000 : field === 'breaks' ? plan.breaks : plan.breakMs / 60000;
 
 const clockOf = ms => new Date(ms).toLocaleTimeString(undefined, { hour: 'numeric', minute: '2-digit' });
 
@@ -1242,14 +1269,28 @@ function paintLock() {
         <div class="lock-label">Stretch ${phase.index + 1} of ${phase.of}</div>
         <div class="lock-big">DO NOT USE</div>
         <div class="lock-time" id="lockTime">${mmss(phase.left)}</div>
-        <ul class="lock-lines">${LOCK_LINES.map(l => `<li>${l}</li>`).join('')}</ul>
-        <button class="lock-out" data-act="hold-end"><span class="hold-fill"></span>
-          <span class="hold-text">Hold to end session</span></button>`;
+        <p class="lock-line" id="lockLine">${LOCK_LINES[0]}</p>
+        ${canExitHere() ? `<button class="lock-out" data-act="hold-end"><span class="hold-fill"></span>
+          <span class="hold-text">Hold to end</span></button>` : ''}`;
     lock.hidden = false;
+    if (!wrap.hidden) closeSheet();   // don't leave a sheet stranded under the lock
     document.body.classList.add('is-locked');
   } else {
     const t = $('#lockTime');
     if (t) t.textContent = mmss(phase.left);
+  }
+
+  // one sentence at a time, changed slowly enough to stay calm
+  const line = $('#lockLine');
+  if (line) {
+    const i = Math.floor(Date.now() / 15000) % LOCK_LINES.length;
+    if (line.dataset.i !== String(i)) {
+      line.dataset.i = String(i);
+      line.classList.remove('is-in');
+      void line.offsetWidth;
+      line.textContent = LOCK_LINES[i];
+      line.classList.add('is-in');
+    }
   }
 }
 
@@ -1300,7 +1341,7 @@ function focusTick() {
   paintLock();
   paintFocusBanner();
   if (state.tab === 'focus' && !isPhone()) {
-    const t = $('#view-focus .hero-time');
+    const t = $('#view-focus .calm-time');
     if (t) t.textContent = mmss(phase.left);
   }
 }
@@ -1567,13 +1608,15 @@ async function startSync(code) {
 
 
 /* Press and hold, so the alarm can't be swatted away half-asleep. */
-const HOLD_MS = 3000;
+const HOLD_MS = 3000;          // the alarm dismissal stays at three seconds
+const EXIT_HOLD_MS = 5000;     // ending a session takes longer still
 let holdTimer = null;
 
-function beginHold(btn, done) {
+function beginHold(btn, done, ms = HOLD_MS) {
   cancelHold();
+  btn.style.setProperty('--hold', ms + 'ms');
   btn.classList.add('is-holding');
-  holdTimer = setTimeout(() => { btn.classList.remove('is-holding'); holdTimer = null; done(); }, HOLD_MS);
+  holdTimer = setTimeout(() => { btn.classList.remove('is-holding'); holdTimer = null; done(); }, ms);
 }
 
 function cancelHold() {
@@ -1594,10 +1637,10 @@ for (const ev of ['pointerdown']) {
         stopAlarm();
         $('#lock').dataset.mode = '';        // force a repaint into the study screen
         paintLock();
-      } else {
+      } else if (canExitHere()) {
         endFocus();
       }
-    });
+    }, act === 'hold-end' ? EXIT_HOLD_MS : HOLD_MS);
   }, { passive: false });
 }
 for (const ev of ['pointerup', 'pointercancel', 'pointerleave']) {
@@ -1689,16 +1732,10 @@ document.addEventListener('click', e => {
       showView();
       break;
 
-    case 'focus-set': {
-      const plan = focusPlan();
-      const v = +el.dataset.value;
-      if (el.dataset.field === 'total') plan.totalMs = v * 60000;
-      if (el.dataset.field === 'breaks') plan.breaks = v;
-      if (el.dataset.field === 'breakLen') plan.breakMs = v * 60000;
-      const s = session();
-      if (s) touch(Object.assign(s, plan));
-      else db.focus.push(touch({ id: FOCUS_ID, startedAt: 0, endedAt: null, ...plan }));
-      save();
+    case 'focus-step': {
+      const field = el.dataset.field;
+      const [stepBy] = FOCUS_LIMITS[field];
+      setFocusField(field, fieldValue(field, focusPlan()) + stepBy * +el.dataset.dir);
       renderFocus();
       break;
     }
@@ -1746,6 +1783,25 @@ sheet.addEventListener('change', e => {
   const isNew = e.target.value === '__new';
   sheet.querySelector('#newClassField').hidden = !isNew;
   if (isNew) sheet.querySelector('#f-newclass').focus();
+});
+
+/* Typing straight into a value: keep it to digits, commit on blur or Enter. */
+document.addEventListener('input', e => {
+  const el = e.target.closest('.step-input');
+  if (!el) return;
+  el.value = el.value.replace(/[^0-9]/g, '').slice(0, 3);
+});
+
+document.addEventListener('change', e => {
+  const el = e.target.closest('.step-input');
+  if (!el) return;
+  const v = setFocusField(el.dataset.field, parseInt(el.value, 10) || 0);
+  el.value = v;
+  renderFocus();
+});
+
+document.addEventListener('keydown', e => {
+  if (e.key === 'Enter' && e.target.closest('.step-input')) { e.preventDefault(); e.target.blur(); }
 });
 
 sheet.addEventListener('submit', e => { e.preventDefault(); submitForm(); });
