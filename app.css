@@ -1341,3 +1341,56 @@ main {
 }
 
 .focus-setup .btn { max-width: 340px; margin-left: auto; margin-right: auto; }
+
+/* stop control on the computer's session screen */
+.stop-btn {
+  position: relative;
+  overflow: hidden;
+  display: block;
+  width: min(260px, 70%);
+  min-height: 50px;
+  margin: 46px auto 0;
+  border-radius: 999px;
+  font-size: 13.5px;
+  font-weight: 650;
+  letter-spacing: .1em;
+  color: var(--muted);
+  background: var(--surface);
+  box-shadow: inset 0 0 0 1px var(--line);
+  -webkit-user-select: none;
+  user-select: none;
+  touch-action: none;
+  transition: color .2s ease;
+}
+
+.stop-btn:hover { color: var(--text); }
+.stop-btn .hold-fill { background: color-mix(in srgb, var(--danger) 26%, transparent); }
+.stop-btn.is-holding { color: var(--danger); }
+
+.stop-hint {
+  margin: 10px 0 0;
+  text-align: center;
+  font-size: 12.5px;
+  color: var(--muted);
+  opacity: .7;
+}
+
+/* the phone's sync nudge, deliberately quiet */
+.lock-sync {
+  margin-top: 30px;
+  min-height: 36px;
+  padding: 0 18px;
+  border-radius: 999px;
+  font-size: 12.5px;
+  font-weight: 600;
+  letter-spacing: .08em;
+  text-transform: uppercase;
+  color: #fff;
+  opacity: .5;
+  background: rgba(255, 255, 255, .14);
+  transition: opacity .2s ease;
+}
+
+.lock-sync:active { opacity: .8; }
+.lock-sync.is-busy { animation: breathe 1.4s ease-in-out infinite; }
+.lock.is-alarm .lock-sync { margin-top: 22px; }

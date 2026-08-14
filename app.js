@@ -1036,7 +1036,8 @@ const isPhone = () => matchMedia('(max-width: 820px)').matches && matchMedia('(p
    phone, and only by holding the button down. */
 function canExitHere() {
   const s = session();
-  return !!s && s.startedOn === 'phone' && isPhone();
+  if (!s) return false;
+  return isPhone() ? s.startedOn === 'phone' : true;   // a computer can always stop it
 }
 
 function startFocus(plan) {
@@ -1183,6 +1184,9 @@ function renderFocus() {
           ? 'Break — your phone is free until this runs out.'
           : 'Your phone is put away. Keep going.'}</p>
         <span class="calm-bar"><span style="width:${Math.round((1 - phase.left / phase.total) * 100)}%"></span></span>
+        <button class="stop-btn" data-act="hold-stop"><span class="hold-fill"></span>
+          <span class="hold-text">HOLD TO STOP</span></button>
+        <p class="stop-hint">Hold for 7 seconds</p>
       </div>`;
     return;
   }
@@ -1245,7 +1249,12 @@ function paintLock() {
   const show = focusActive() && isPhone();
 
   if (!show) {
-    if (!lock.hidden) { lock.hidden = true; lock.innerHTML = ''; document.body.classList.remove('is-locked'); }
+    if (!lock.hidden) {
+      lock.hidden = true;
+      lock.innerHTML = '';
+      lock.dataset.mode = '';   // clear it, or the next session in the same mode never rebuilds
+      document.body.classList.remove('is-locked');
+    }
     return;
   }
 
@@ -1255,21 +1264,25 @@ function paintLock() {
   if (lock.dataset.mode !== mode) {
     lock.dataset.mode = mode;
     lock.className = `lock is-${mode}`;
+    const syncBtn = `<button class="lock-sync" data-act="lock-sync">Sync</button>`;
     lock.innerHTML = mode === 'break' ? `
         <div class="lock-label">Break ${phase.index + 1} of ${phase.of}</div>
         <div class="lock-big">HAVE FUN</div>
         <div class="lock-time" id="lockTime">${mmss(phase.left)}</div>
-        <div class="lock-note">Back to it when this hits zero.</div>`
+        <div class="lock-note">Back to it when this hits zero.</div>
+        ${syncBtn}`
       : mode === 'alarm' ? `
         <div class="lock-big">TIME'S UP</div>
         <div class="lock-note">Hold the button to stop the alarm and start studying.</div>
         <button class="hold" data-act="hold-study"><span class="hold-fill"></span>
-          <span class="hold-text">I WILL STUDY NOW</span></button>`
+          <span class="hold-text">I WILL STUDY NOW</span></button>
+        ${syncBtn}`
       : `
         <div class="lock-label">Stretch ${phase.index + 1} of ${phase.of}</div>
         <div class="lock-big">DO NOT USE</div>
         <div class="lock-time" id="lockTime">${mmss(phase.left)}</div>
         <p class="lock-line" id="lockLine">${LOCK_LINES[0]}</p>
+        ${syncBtn}
         ${canExitHere() ? `<button class="lock-out" data-act="hold-end"><span class="hold-fill"></span>
           <span class="hold-text">Hold to end</span></button>` : ''}`;
     lock.hidden = false;
@@ -1313,6 +1326,28 @@ function paintFocusBanner() {
     <span>${phase.kind === 'break' ? 'Break' : 'Focus'} · ${mmss(phase.left)} left</span>
     <span class="focus-bar-note">${phase.kind === 'break' ? 'phone is on break' : 'phone is locked'}</span>`;
   document.body.classList.add('has-focusbar');
+}
+
+/* The lock hides everything else, so this is the only way to make the phone
+   check in when it hasn't picked up a change on its own yet. */
+let lockSyncTimer = null;
+
+async function lockSync(btn) {
+  const say = (text, ms = 2200) => {
+    btn.textContent = text;
+    clearTimeout(lockSyncTimer);
+    lockSyncTimer = setTimeout(() => { btn.textContent = 'Sync'; btn.classList.remove('is-busy'); }, ms);
+  };
+  if (!sync.code) return say('Sync is off');
+  if (sync.busy) return;
+
+  btn.classList.add('is-busy');
+  btn.textContent = 'Checking…';
+  clearTimeout(lockSyncTimer);
+  await syncNow();
+  btn.classList.remove('is-busy');
+  if (!focusActive()) return;                  // the session ended: the lock is on its way out
+  say(sync.status === 'error' ? (sync.note || 'No connection') : 'Up to date');
 }
 
 /* One clock drives the whole thing: it repaints the lock screen, keeps the
@@ -1609,7 +1644,8 @@ async function startSync(code) {
 
 /* Press and hold, so the alarm can't be swatted away half-asleep. */
 const HOLD_MS = 3000;          // the alarm dismissal stays at three seconds
-const EXIT_HOLD_MS = 5000;     // ending a session takes longer still
+const EXIT_HOLD_MS = 5000;     // ending from the phone takes longer still
+const STOP_HOLD_MS = 7000;     // and stopping from the computer longer again
 let holdTimer = null;
 
 function beginHold(btn, done, ms = HOLD_MS) {
@@ -1626,7 +1662,7 @@ function cancelHold() {
 
 for (const ev of ['pointerdown']) {
   document.addEventListener(ev, e => {
-    const btn = e.target.closest('[data-act="hold-study"], [data-act="hold-end"]');
+    const btn = e.target.closest('[data-act="hold-study"], [data-act="hold-end"], [data-act="hold-stop"]');
     if (!btn) return;
     e.preventDefault();
     const act = btn.dataset.act;
@@ -1640,7 +1676,7 @@ for (const ev of ['pointerdown']) {
       } else if (canExitHere()) {
         endFocus();
       }
-    }, act === 'hold-end' ? EXIT_HOLD_MS : HOLD_MS);
+    }, act === 'hold-end' ? EXIT_HOLD_MS : act === 'hold-stop' ? STOP_HOLD_MS : HOLD_MS);
   }, { passive: false });
 }
 for (const ev of ['pointerup', 'pointercancel', 'pointerleave']) {
@@ -1731,6 +1767,8 @@ document.addEventListener('click', e => {
       scrollTo(0, 0);
       showView();
       break;
+
+    case 'lock-sync': lockSync(el); break;
 
     case 'focus-step': {
       const field = el.dataset.field;

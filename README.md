@@ -98,10 +98,15 @@ Out-of-range numbers are clamped rather than refused.
   hits zero, cleared only by holding **I WILL STUDY NOW** for three seconds.
 - **On a computer** nothing is blocked. A strip above the tab bar shows the
   phase, the time left, and that the phone is locked.
-- **Getting out depends on where the session began.** Started on the phone: a
-  faint *hold to end* sits at the bottom of the lock, and it takes a full five
-  seconds. Started on the computer: there is no exit anywhere, on either
-  device — it runs until the timer does. Choose the length with that in mind.
+- **Stopping.** The computer always has a clear **HOLD TO STOP**, which takes a
+  deliberate seven seconds. On the phone, a faint *hold to end* appears only if
+  the session was started there, and takes five. The alarm's *I WILL STUDY NOW*
+  stays at three.
+- **The phone's lock has a Sync button.** Devices check in every fifteen
+  seconds during a session, but a phone that has been asleep can lag — tapping
+  Sync makes it check immediately, which is how you free it right after
+  stopping a session from the computer. It reports back (*Up to date*, or the
+  problem) and settles again.
 
 Sound is started by the tap that begins the session, which is what browsers
 require, and kept alive by a silent loop. The chime and alarm are scheduled on
