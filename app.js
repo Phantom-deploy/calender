@@ -261,7 +261,7 @@ function render() {
     : state.tab === 'calendar' ? `${MONTHS[state.month]} ${state.year}`
     : inClass ? className(state.classId)
     : state.tab === 'schedule' ? 'Schedule'
-    : state.tab === 'focus' ? 'Focus' : 'Projects';
+    : state.tab === 'focus' ? 'Focus' : 'Tasks';
 
   $('#prevMonth').hidden = $('#nextMonth').hidden = state.tab !== 'calendar';
 
@@ -272,7 +272,7 @@ function render() {
   else if (state.tab === 'calendar') renderCalendar();
   else if (state.tab === 'schedule') inClass ? renderClass() : renderSchedule();
   else if (state.tab === 'focus') renderFocus();
-  else renderProjects();
+  else renderTasks();
   paintFocusBanner();
 }
 
@@ -430,28 +430,86 @@ function renderClass() {
     </div>`;
 }
 
-function renderProjects() {
-  const list = [...db.projects].sort((a, b) => {
-    const done = (statusOf(a).pct === 100) - (statusOf(b).pct === 100);
-    return done || (a.due < b.due ? -1 : a.due > b.due ? 1 : 0);
-  });
+/* ---------------- tasks ----------------
+   Homework and projects in one list, bucketed by deadline. Finished items
+   drop to the bottom, but only on the next build — checking something off
+   leaves it where it is, so the list never jumps under your finger. */
 
-  const rows = list.map(p => {
-    const st = statusOf(p);
-    const late = st.pct < 100 && p.due < today();
-    return `<button class="row" data-act="open" data-kind="project" data-id="${p.id}">
-      <span class="row-main">
-        <span class="row-title">${esc(p.name)}</span>
-        <span class="row-sub${late ? ' is-late' : ''}">${st.label} · ${relLabel(p.due)}</span>
-        <span class="bar"><span style="width:${st.pct}%"></span></span>
-      </span>${CHEV}</button>`;
-  }).join('');
+const TASK_GROUPS = [
+  ['late', 'Overdue'], ['today', 'Today'], ['tomorrow', 'Tomorrow'],
+  ['week', 'This week'], ['later', 'Later'], ['done', 'Done']
+];
 
-  $('#view-projects').innerHTML =
-    (rows ? `<div class="card top">${rows}</div>`
-          : `<p class="empty">No projects yet. Big assignments added here also show on the calendar.</p>`) +
-    `<div class="card gap"><button class="row" data-act="add" data-type="project">${PLUS}
-      <span class="row-main"><span class="row-title accent">New Project</span></span></button></div>`;
+function taskGroups() {
+  const t = today(), tm = shift(t, 1), wk = shift(t, 7);
+  const all = [];
+  for (const h of db.homework) all.push({ kind: 'homework', item: h, due: h.due, done: !!h.done });
+  for (const p of db.projects) all.push({ kind: 'project', item: p, due: p.due, done: statusOf(p).pct === 100 });
+  all.sort((a, b) => a.due < b.due ? -1 : a.due > b.due ? 1 : 0);
+
+  const bucket = new Map(TASK_GROUPS.map(([key]) => [key, []]));
+  for (const x of all) {
+    bucket.get(x.done ? 'done'
+      : x.due < t ? 'late'
+      : x.due === t ? 'today'
+      : x.due === tm ? 'tomorrow'
+      : x.due <= wk ? 'week' : 'later').push(x);
+  }
+  return TASK_GROUPS.map(([key, title]) => ({ key, title, items: bucket.get(key) }))
+    .filter(g => g.items.length);
+}
+
+/** The deadline, only where the group heading doesn't already say it. */
+function dueChip(x) {
+  if (x.done) return '';
+  const n = daysBetween(today(), x.due);
+  if (n < 0) return `<span class="due is-late">${-n}d late</span>`;
+  if (n <= 1) return '';
+  const d = parseISO(x.due);
+  return `<span class="due">${n <= 7
+    ? d.toLocaleDateString(undefined, { weekday: 'short' })
+    : d.toLocaleDateString(undefined, { month: 'short', day: 'numeric' })}</span>`;
+}
+
+function taskRowHTML(x) {
+  const it = x.item, hw = x.kind === 'homework';
+  const st = hw ? null : statusOf(it);
+  const sub = hw
+    ? [className(it.classId), it.details].filter(Boolean).join(' · ')
+    : `Project · ${st.label}`;
+  const mark = hw
+    ? `<button class="check" data-act="toggle" data-id="${it.id}" aria-pressed="${!!it.done}"
+        aria-label="Mark done">${TICK}</button>`
+    : `<button class="check is-project${st.id === 'doing' ? ' is-mid' : ''}" data-act="cycle"
+        data-id="${it.id}" aria-label="Status: ${st.label}">${TICK}</button>`;
+
+  return `<div class="row task${x.done ? ' is-done' : ''}">${mark}
+    <button class="row-main" data-act="open" data-kind="${x.kind}" data-id="${it.id}">
+      <span class="row-title">${esc(hw ? it.title : it.name)}</span>
+      ${sub ? `<span class="row-sub">${esc(sub)}</span>` : ''}
+    </button>${dueChip(x)}${CHEV}</div>`;
+}
+
+function renderTasks() {
+  const groups = taskGroups();
+  const body = groups.map((g, i) => `
+    <div class="section-head task-in" style="--i:${i}">
+      <h2>${g.title}</h2><span class="count">${g.items.length}</span></div>
+    <div class="card task-in${g.key === 'done' ? ' is-finished' : ''}" style="--i:${i}"
+      >${g.items.map(taskRowHTML).join('')}</div>`).join('');
+
+  $('#view-tasks').innerHTML =
+    (body || `<p class="empty">Nothing to do. Homework and projects you add show up here,
+      with the closest deadline first.</p>`) +
+    `<div class="card gap"><button class="row" data-act="add" data-type="homework">${PLUS}
+      <span class="row-main"><span class="row-title accent">New task</span></span></button></div>`;
+}
+
+/** Re-run the tick animation on a control that is already on screen. */
+function popCheck(btn) {
+  btn.classList.remove('pop');
+  void btn.offsetWidth;
+  btn.classList.add('pop');
 }
 
 
@@ -1711,8 +1769,34 @@ document.addEventListener('click', e => {
       h.completedAt = h.done ? stamp() : undefined;   // starts the 2-day countdown to removal
       touch(h);
       save();
+      // In Tasks the row stays where it is, so only that row changes — no
+      // rebuild, and nothing shifts under the finger that just tapped it.
+      if (state.tab === 'tasks') {
+        el.closest('.row')?.classList.toggle('is-done', h.done);
+        el.setAttribute('aria-pressed', String(h.done));
+        if (h.done) popCheck(el);
+        break;
+      }
       render();
       if (h.done) document.querySelector(`.check[data-id="${h.id}"]`)?.classList.add('pop');
+      break;
+    }
+
+    /* Not started → In progress → Done, straight from the list. */
+    case 'cycle': {
+      const p = byId(db.projects, el.dataset.id);
+      if (!p) break;
+      const next = STATUSES[(STATUSES.indexOf(statusOf(p)) + 1) % STATUSES.length];
+      p.status = next.id;
+      touch(p);
+      save();
+      const row = el.closest('.row');
+      row?.classList.toggle('is-done', next.pct === 100);
+      el.classList.toggle('is-mid', next.id === 'doing');
+      el.setAttribute('aria-label', `Status: ${next.label}`);
+      const sub = row?.querySelector('.row-sub');
+      if (sub) sub.textContent = `Project · ${next.label}`;
+      if (next.pct === 100) popCheck(el);
       break;
     }
 
@@ -1917,9 +2001,16 @@ setTheme(storedTheme === 'dark' ? 'dark' : 'light');
 $('#themeBtn').addEventListener('click', () =>
   setTheme(document.documentElement.dataset.theme === 'dark' ? 'light' : 'dark'));
 
-/* hairline under the top bar once the page scrolls */
+/* hairline under the top bar once the page scrolls. The class is only touched
+   when it actually changes, so a long scroll doesn't poke the DOM every frame. */
 const topbar = document.querySelector('.topbar');
-addEventListener('scroll', () => topbar.classList.toggle('is-scrolled', scrollY > 4), { passive: true });
+let scrolled = false;
+addEventListener('scroll', () => {
+  const now = scrollY > 4;
+  if (now === scrolled) return;
+  scrolled = now;
+  topbar.classList.toggle('is-scrolled', now);
+}, { passive: true });
 
 /* roll over at midnight if the app is left open */
 let openedOn = today();
