@@ -192,7 +192,8 @@ svg {
 
 /* ---------- Layout ---------- */
 main {
-  /* bottom padding keeps the last row clear of the floating + button */
+  /* bottom padding keeps the last row clear of the tab bar, and of the focus
+     strip that floats above it during a session */
   padding: 2px calc(var(--pad) + var(--safe-left)) 96px calc(var(--pad) + var(--safe-right));
   max-width: 620px;
   margin: 0 auto;
@@ -470,25 +471,63 @@ main {
 
 .link-btn:active { background: var(--accent-soft); transform: scale(.95); }
 
-/* ---------- Progress ---------- */
-.bar {
-  display: block;
-  height: 5px;
-  border-radius: 999px;
+/* ---------- Tasks ---------- */
+.section-head .count {
+  font-size: 12.5px;
+  font-weight: 650;
+  color: var(--muted);
+  opacity: .65;
+  font-variant-numeric: tabular-nums;
+}
+
+.row.task { gap: 11px; }
+
+/* whole row is interactive, so it lights up as one on a mouse */
+@media (hover: hover) {
+  .row.task:hover { background: var(--surface-2); }
+}
+
+.due {
+  flex: none;
+  font-size: 12.5px;
+  font-weight: 600;
+  white-space: nowrap;
+  color: var(--muted);
   background: var(--surface-2);
-  overflow: hidden;
-  margin-top: 9px;
-}
-
-.bar > span {
-  display: block;
-  height: 100%;
-  background: var(--accent);
+  padding: 4px 9px;
   border-radius: 999px;
-  transition: width .35s var(--ease);
+  font-variant-numeric: tabular-nums;
 }
 
-/* ---------- Tab bar & FAB ---------- */
+.due.is-late {
+  color: var(--danger);
+  background: color-mix(in srgb, var(--danger) 13%, transparent);
+}
+
+.row.is-done .due { opacity: .5; }
+
+/* finished work stays readable but stops competing with what is still open */
+.card.is-finished { opacity: .62; }
+
+/* the half-filled state of a project's status circle */
+.check { position: relative; }
+
+.check.is-project::before {
+  content: "";
+  position: absolute;
+  inset: 5px;
+  border-radius: 50%;
+  background: var(--accent);
+  transform: scale(0);
+  transition: transform .22s var(--ease);
+}
+
+.check.is-project.is-mid::before { transform: scale(1); }
+
+/* groups fade up in sequence when the list is built */
+.task-in { animation: softIn .26s var(--ease) both; animation-delay: calc(var(--i) * 45ms); }
+
+/* ---------- Tab bar ---------- */
 .tabbar {
   position: fixed;
   left: 0;
@@ -528,26 +567,6 @@ main {
 .tab:active svg { transform: scale(.88); }
 .tab.is-active { color: var(--accent); }
 .tab.is-active svg { transform: translateY(-1px); }
-
-.fab {
-  position: fixed;
-  right: calc(18px + var(--safe-right));
-  bottom: calc(var(--tabbar-h) + var(--safe-bottom) + 18px);
-  z-index: 21;
-  width: 54px;
-  height: 54px;
-  border-radius: 50%;
-  display: grid;
-  place-items: center;
-  background: var(--accent);
-  color: var(--on-accent);
-  box-shadow: 0 8px 20px rgba(20, 30, 60, .28);
-  box-shadow: var(--shadow-fab);
-  transition: transform .2s var(--ease), box-shadow .2s ease;
-}
-
-.fab svg { stroke-width: 2.3; }
-.fab:active { transform: scale(.9); }
 
 /* ---------- Sheet ---------- */
 .sheet-wrap { position: fixed; inset: 0; z-index: 40; }
@@ -921,8 +940,6 @@ main {
   padding: 14px 16px 8px;
 }
 
-.panel .chips.wrap + .panel-head { padding-top: 6px; }
-
 .panel-head h2 {
   margin: 0;
   font-size: 12.5px;
@@ -1016,42 +1033,6 @@ main {
 }
 
 /* ---------- Focus ---------- */
-.focus-intro { margin-top: 16px; }
-.focus-note { margin-top: 16px; text-align: center; }
-
-.chips.wrap {
-  flex-wrap: wrap;
-  gap: 6px;
-  margin-top: 0;
-  padding: 0 14px 14px;
-}
-
-/* share the row evenly so a set of five never spills onto a second line */
-.chips.wrap .chip {
-  flex: 1 1 0;
-  min-width: 0;
-  min-height: 44px;
-  padding: 0 4px;
-  font-size: 14px;
-  box-shadow: inset 0 0 0 1px var(--line);
-}
-.chip.is-on {
-  background: var(--accent);
-  color: var(--on-accent);
-  box-shadow: var(--shadow-pill);
-  font-weight: 700;
-}
-
-.focus-summary {
-  margin: 16px 6px 12px;
-  text-align: center;
-  font-size: 14.5px;
-  color: var(--muted);
-  line-height: 1.5;
-}
-
-.hero.is-break { background: color-mix(in srgb, #2563eb 14%, var(--surface)); }
-
 /* the strip that tells a computer a session is running */
 .focus-bar {
   position: fixed;

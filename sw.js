@@ -1,5 +1,5 @@
 /* Offline shell. Bump CACHE when any asset changes. */
-const CACHE = 'planner-v12';
+const CACHE = 'planner-v13';
 const ASSETS = [
   './',
   'index.html',

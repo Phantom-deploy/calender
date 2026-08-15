@@ -26,6 +26,7 @@ Screen**. It then launches standalone, without Safari's chrome, and works offlin
 | File | Purpose |
 | --- | --- |
 | `index.html` | Static shell: top bar, five views, tab bar, sheet and lock layers |
+| `WORKSPACE.md` | How the whole thing is put together, view by view — read this first |
 | `app.css` | All styling; light/dark via `[data-theme]` custom properties. Type is `ui-rounded` (SF Pro Rounded on iOS), a system font, so nothing downloads |
 | `app.js` | State, storage, rendering, and event handling |
 | `sw.js` | Offline cache of the app shell |
@@ -71,6 +72,21 @@ It shows the period you're in with the time left (tap it to jump to the full
 schedule), a big **Add homework** button with quick chips for a note, project or
 date, then two lists: **Do tonight** (due tomorrow) and **Still due** (due today
 or already late).
+
+## Tasks
+
+Everything you have to finish, in one list: all homework and all projects
+together, grouped by deadline — **Overdue**, **Today**, **Tomorrow**, **This
+week**, **Later**, then **Done**. Each heading carries a count, and a chip on
+the right of a row shows the deadline where the heading doesn't already say it
+(`3d late` in red, a weekday this week, a short date beyond that).
+
+The circle on the left is the status. Tap it on homework to check it off; tap
+it on a project to move it *Not started → In progress → Done*. A checked item
+stays where it is, crossed out, so the list never jumps under your finger — it
+drops into **Done** the next time the view is built. Tapping the rest of the
+row opens the usual edit sheet, and **New task** at the bottom opens the add
+sheet, where you can switch the type to a project, note or date.
 
 ## Focus
 
