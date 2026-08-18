@@ -147,7 +147,7 @@ function itemsOn(date) {
   const out = [];
   for (const h of db.homework) if (h.due === date) out.push({ kind: 'homework', item: h, color: classColor(h.classId) });
   for (const p of db.projects) if (p.due === date) out.push({ kind: 'project', item: p, color: PROJECT_COLOR });
-  for (const e of db.events) if (e.date === date) out.push({ kind: 'event', item: e, color: EVENT_COLOR });
+  for (const e of db.events) if (e.date === date) out.push({ kind: 'event', item: e, color: e.classId ? classColor(e.classId) : EVENT_COLOR });
   for (const n of db.notes) if (n.date === date) out.push({ kind: 'note', item: n, color: classColor(n.classId) });
   return out;
 }
@@ -357,7 +357,10 @@ function rowHTML({ kind, item }, opts = {}) {
     const sub = opts.hideClass
       ? [relLabel(item.due), item.details].filter(Boolean).join(' · ')
       : `${className(item.classId)} · ${relLabel(item.due)}`;
-    return `<div class="row${item.done ? ' is-done' : ''}">
+    // `open` also sits on the outer div: the chevron and its padding are
+    // outside the row-main button, so without it those areas look tappable
+    // (the chevron says so) but silently do nothing.
+    return `<div class="row${item.done ? ' is-done' : ''}" ${open}>
       <button class="check" data-act="toggle" data-id="${item.id}" aria-pressed="${!!item.done}" aria-label="Mark done">${TICK}</button>
       <button class="row-main" ${open}>
         <span class="row-title">${esc(item.title)}</span>
@@ -376,11 +379,12 @@ function rowHTML({ kind, item }, opts = {}) {
   }
 
   if (kind === 'event') {
+    const sub = item.classId ? `${className(item.classId)} · ${relLabel(item.date)}` : relLabel(item.date);
     return `<button class="row" ${open}>
-      <span class="swatch" style="background:${EVENT_COLOR}"></span>
+      <span class="swatch" style="background:${item.classId ? classColor(item.classId) : EVENT_COLOR}"></span>
       <span class="row-main">
         <span class="row-title">${esc(item.title)}</span>
-        <span class="row-sub">${relLabel(item.date)}</span>
+        <span class="row-sub">${esc(sub)}</span>
       </span>${CHEV}</button>`;
   }
 
@@ -483,8 +487,11 @@ function taskRowHTML(x) {
     : `<button class="check is-project${st.id === 'doing' ? ' is-mid' : ''}" data-act="cycle"
         data-id="${it.id}" aria-label="Status: ${st.label}">${TICK}</button>`;
 
-  return `<div class="row task${x.done ? ' is-done' : ''}">${mark}
-    <button class="row-main" data-act="open" data-kind="${x.kind}" data-id="${it.id}">
+  // the open action sits on the outer div too, so the due chip and chevron
+  // — outside the row-main button — are tappable like the rest of the row
+  const open = `data-act="open" data-kind="${x.kind}" data-id="${it.id}"`;
+  return `<div class="row task${x.done ? ' is-done' : ''}" ${open}>${mark}
+    <button class="row-main" ${open}>
       <span class="row-title">${esc(hw ? it.title : it.name)}</span>
       ${sub ? `<span class="row-sub">${esc(sub)}</span>` : ''}
     </button>${dueChip(x)}${CHEV}</div>`;
@@ -808,12 +815,16 @@ const baseDate = () => (state.tab === 'calendar' && state.selected !== today()) 
 /** Due dates default forward only when you're on today (homework → tomorrow). */
 const defaultDue = offset => baseDate() === today() ? shift(today(), offset) : baseDate();
 
-function classField(selected) {
-  const showNew = !db.classes.length;
-  const options = db.classes.map(c =>
+/** `optional` adds a "No class" choice and skips forcing "New class…" as the
+    default pick when there are no classes yet — a date isn't always tied to
+    one, unlike homework or a note. */
+function classField(selected, { optional = false } = {}) {
+  const showNew = !optional && !db.classes.length;
+  const none = optional ? `<option value=""${!selected ? ' selected' : ''}>No class</option>` : '';
+  const options = none + db.classes.map(c =>
     `<option value="${c.id}"${c.id === selected ? ' selected' : ''}>${esc(c.name)}</option>`).join('') +
     `<option value="__new"${showNew ? ' selected' : ''}>New class…</option>`;
-  return `<div class="field"><label for="f-class">Class</label>
+  return `<div class="field"><label for="f-class">Class${optional ? ' <span class="opt">(optional)</span>' : ''}</label>
       <select id="f-class">${options}</select></div>
     <div class="field" id="newClassField"${showNew ? '' : ' hidden'}>
       <label for="f-newclass">New class name</label>
@@ -855,6 +866,7 @@ function formHTML(type, v = {}) {
     <div class="field"><label for="f-title">Title</label>
       <input id="f-title" type="text" data-autofocus value="${esc(v.title)}" placeholder="Field trip"
         autocapitalize="sentences" enterkeyhint="done"></div>
+    ${classField(v.classId, { optional: true })}
     <div class="field"><label for="f-date">Date</label>
       <input id="f-date" type="date" value="${esc(v.date || baseDate())}"></div>
     <div class="field"><label for="f-details">Details <span class="opt">(optional)</span></label>
@@ -978,7 +990,11 @@ function submitForm() {
   } else {
     const title = val('#f-title');
     if (!title) return flash('#f-title');
-    const data = { title, date: val('#f-date') || today(), details: val('#f-details') };
+    // resolveClass() returns '' for "No class" (fine here) and null only when
+    // "New class…" was picked and left blank — that's the one real error
+    const classId = resolveClass();
+    if (classId === null) return flash('#f-newclass');
+    const data = { title, classId, date: val('#f-date') || today(), details: val('#f-details') };
     if (editing) touch(Object.assign(byId(db.events, ctx.id), data));
     else db.events.push(touch({ id: uid(), ...data }));
   }

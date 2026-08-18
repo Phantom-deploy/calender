@@ -80,7 +80,7 @@ The database is a plain object of arrays:
   homework:  [{ id, title, classId, due, details, done, completedAt, updatedAt }],
   notes:     [{ id, text, classId, date, updatedAt }],
   projects:  [{ id, name, due, status, description, updatedAt }],
-  events:    [{ id, title, date, details, updatedAt }],
+  events:    [{ id, title, date, details, classId, updatedAt }],
   schedule:  [{ id: 'p3', period: 3, classId, room, teacher, updatedAt }],
   overrides: [{ id: '2026-09-14', date, key, updatedAt }],
   focus:     [{ id: 'session', startedAt, endedAt, totalMs, breaks, breakMs, startedOn, updatedAt }],
@@ -290,6 +290,11 @@ Points worth knowing:
 
 New homework defaults to tomorrow, projects to a week out. If you are looking
 at another day on the calendar, new items land on that day instead.
+
+A Date can optionally be tied to a class, unlike homework and notes where a
+class is required. With no class picked its swatch and calendar dot stay
+amber (`EVENT_COLOR`); with one picked they take that class's color instead,
+the same as homework and notes.
 
 ## Sync
 

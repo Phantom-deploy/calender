@@ -337,6 +337,10 @@ main {
   transition: background-color .18s ease;
 }
 
+/* .row.block (the schedule's plain period list) is the only row with no
+   action of its own — everything else responds to a tap somewhere */
+.row:not(.block) { cursor: pointer; }
+
 /* hairline separators, inset like a native list */
 .row + .row::before {
   content: "";

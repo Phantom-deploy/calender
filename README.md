@@ -47,7 +47,8 @@ Screen**. It then launches standalone, without Safari's chrome, and works offlin
   tombstone like any other delete, so it disappears from every synced device,
   not just the one you checked it off on.
 - **Everything dated shows on the calendar** as a small dot: homework and notes in
-  their class colour, projects in purple, important dates in amber.
+  their class colour, projects in purple, important dates in amber — or in their
+  class's colour too, if you tag a date to one (the class picker there is optional).
 - **Today's view** lists what's due today, anything overdue, and the next few
   items within three weeks.
 - **Adding a class** can happen inline — pick "New class…" in the class dropdown
