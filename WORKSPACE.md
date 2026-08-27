@@ -336,6 +336,25 @@ and sets `theme-color` and `apple-mobile-web-app-status-bar-style` so iOS does
 not paint a white status bar over a dark app. The dark background is pure
 black so the two meet seamlessly.
 
+## Announcement banner
+
+A pill under the top bar reads **MASSIVE UPDATE COMING SOON · CLICK TO SEE**.
+It lives in `index.html` between the header and `<main>`, so it shows on every
+tab and scrolls away with the content rather than taking permanent space. It
+stacks onto two lines below 430px so both strings stay whole and readable.
+
+Tapping it opens a three-screen deck built from the `NEWS` array in `app.js`:
+thanks, what's coming, then the promise screen in gold. Paging is by the Next
+button, the dots, arrow keys, or a horizontal swipe; the screens reuse the
+`.anim-left` / `.anim-right` slides from the calendar's month change.
+
+The deck opens by itself once per device. `newsSeen()` compares
+`localStorage['planner.news']` against `NEWS_ID`; `openNews()` writes the flag,
+so opening it either way counts. **To announce something new, edit `NEWS` and
+bump `NEWS_ID`** — every device then sees the new deck exactly once. A
+storage read that throws counts as already seen, so a private window is never
+nagged on every launch. It never opens over a focus session or an open sheet.
+
 ## Animation
 
 Animations are part of the design and should not be removed. They are kept
@@ -351,7 +370,9 @@ Where they are:
   wide screens
 - `pop` — the checkbox when homework is checked off
 - Task groups fade up in sequence, using a small per-group delay
-- `breathe` — the sync icon while syncing, and the focus pill's dot
+- `breathe` — the sync icon while syncing, the focus pill's dot, and the
+  announcement banner's dot
+- `ubSweep` — the slow band of light crossing the announcement banner
 - `lineIn` — the rotating reminder on the phone's lock screen
 - `.is-holding .hold-fill` — the hold-to-confirm fill, driven by a CSS
   transition whose duration comes from the `--hold` variable

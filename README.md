@@ -217,7 +217,8 @@ GitHub Pages is https, so that comes free.
 ## Data
 
 Data lives in this browser profile under the `planner.v1` key (sync settings sit
-in `planner.sync`). It survives reloads and offline use, but clearing Safari's
+in `planner.sync`, the theme in `planner.theme`, and the id of the last
+announcement you were shown in `planner.news`). It survives reloads and offline use, but clearing Safari's
 website data will erase it. Home Screen apps get more durable storage than a
 plain Safari tab, so that's the safer place to keep it — and with sync on, the
 other device is your backup.

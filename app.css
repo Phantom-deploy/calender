@@ -15,6 +15,10 @@
   --on-accent: #ffffff;
   --accent-soft: #e9edfd;
   --danger: #d9564d;
+  /* deep enough to read as gold on white and still pass contrast */
+  --gold: #9b7215;
+  --gold-soft: #fbf1dc;
+  --on-gold: #ffffff;
 
   --shadow-card: 0 1px 2px rgba(18, 20, 28, .04), 0 14px 30px -22px rgba(18, 20, 28, .45);
   --shadow-sheet: 0 -12px 48px rgba(12, 14, 20, .2);
@@ -53,6 +57,9 @@
   --on-accent: #0a0d18;   /* dark ink reads on the lighter dark-mode accent */
   --accent-soft: #1a2136;
   --danger: #ff6f68;
+  --gold: #f2c86a;
+  --gold-soft: #2a2113;
+  --on-gold: #241b09;
 
   --shadow-card: none;
   --shadow-sheet: 0 -12px 48px rgba(0, 0, 0, .7);
@@ -812,6 +819,241 @@ main {
   min-height: 46px;
   box-shadow: none;
   margin-top: 2px;
+}
+
+/* ---------- Update banner ---------- */
+/* lines up with main's content box, so it sits flush with the cards below */
+.banner-wrap {
+  max-width: 620px;
+  margin: 0 auto;
+  padding: 8px calc(var(--pad) + var(--safe-right)) 0 calc(var(--pad) + var(--safe-left));
+}
+
+/* Stacked on a phone and one line from 430px up. Both strings are kept whole
+   at a readable size either way — fitting them on one line at 360px would
+   mean 9.5px type, which is worse than a second line. */
+.update-banner {
+  position: relative;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 1px;
+  width: 100%;
+  padding: 7px 14px;
+  border-radius: 18px;
+  background: var(--accent-soft);
+  color: var(--accent);
+  transition: transform .18s var(--ease), background-color .18s ease;
+}
+
+.update-banner:active { transform: scale(.985); }
+.update-banner > * { position: relative; z-index: 1; }
+
+.ub-line {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  max-width: 100%;
+}
+
+.ub-dot {
+  flex: none;
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: currentColor;
+  animation: breathe 1.9s ease-in-out infinite;
+}
+
+.ub-title {
+  min-width: 0;
+  font-size: 11.5px;
+  font-weight: 750;
+  letter-spacing: 0.045em;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.ub-cta {
+  flex: none;
+  display: flex;
+  align-items: center;
+  gap: 1px;
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.045em;
+  white-space: nowrap;
+  opacity: .72;
+}
+
+.ub-chev {
+  flex: none;
+  width: 12px;
+  height: 12px;
+  stroke-width: 2.8;
+}
+
+@media (min-width: 430px) {
+  .update-banner {
+    flex-direction: row;
+    justify-content: center;
+    gap: 8px;
+    min-height: 37px;
+    padding: 8px 14px;
+    border-radius: 999px;
+  }
+  /* a middot ties the two halves into one sentence on the wider layout */
+  .ub-cta::before {
+    content: "·";
+    margin-right: 8px;
+    opacity: .75;
+  }
+}
+
+/* a slow sweep of light, so the strip reads as new without shouting */
+.update-banner::after {
+  content: "";
+  position: absolute;
+  z-index: 0;
+  top: 0;
+  bottom: 0;
+  left: -45%;
+  width: 45%;
+  background: linear-gradient(90deg, transparent,
+    color-mix(in srgb, var(--accent) 15%, transparent), transparent);
+  animation: ubSweep 4.2s ease-in-out infinite;
+}
+
+@keyframes ubSweep {
+  0%, 18% { transform: translateX(0); }
+  72%, 100% { transform: translateX(330%); }
+}
+
+
+/* ---------- What's next (paged announcement) ---------- */
+.news-icon {
+  display: grid;
+  place-items: center;
+  width: 50px;
+  height: 50px;
+  margin: 4px 0 15px;
+  border-radius: 17px;
+  background: var(--accent-soft);
+  color: var(--accent);
+}
+
+.news-icon svg { width: 25px; height: 25px; }
+
+.news-eyebrow {
+  margin: 0 0 7px;
+  font-size: 11.5px;
+  font-weight: 700;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+
+.news-title {
+  margin: 0;
+  font-size: clamp(22px, 6.2vw, 27px);
+  font-weight: 750;
+  letter-spacing: -0.025em;
+  line-height: 1.18;
+}
+
+.news-body {
+  margin: 10px 0 0;
+  font-size: 15.5px;
+  line-height: 1.6;
+  color: var(--muted);
+}
+
+.news-list {
+  list-style: none;
+  margin: 17px 0 0;
+  padding: 0;
+  display: grid;
+  gap: 12px;
+}
+
+.news-list li {
+  display: flex;
+  align-items: flex-start;
+  gap: 11px;
+  font-size: 14.5px;
+  line-height: 1.5;
+}
+
+.news-list svg {
+  flex: none;
+  width: 18px;
+  height: 18px;
+  margin-top: 2px;
+  color: var(--accent);
+  stroke-width: 2.6;
+}
+
+/* the promise screen */
+.news.is-gold .news-icon { background: var(--gold-soft); color: var(--gold); }
+.news.is-gold .news-eyebrow,
+.news.is-gold .news-title { color: var(--gold); }
+
+.news.is-gold .news-next {
+  background: var(--gold);
+  color: var(--on-gold);
+  box-shadow: none;
+}
+
+.news-note {
+  margin: 18px 0 0;
+  padding: 14px 16px;
+  border-radius: var(--r-card);
+  background: var(--gold-soft);
+  color: var(--gold);
+  font-size: 14.5px;
+  font-weight: 600;
+  line-height: 1.55;
+}
+
+.news-foot {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-top: 26px;
+}
+
+.news-dots {
+  display: flex;
+  flex: 1;
+  margin-left: -5px;
+}
+
+.news-dot {
+  display: grid;
+  place-items: center;
+  width: 20px;
+  height: 20px;
+}
+
+.news-dot::before {
+  content: "";
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--surface-2);
+  transition: background-color .25s var(--ease), transform .25s var(--ease);
+}
+
+[data-theme="dark"] .news-dot::before { background: #363943; }
+.news-dot.is-on::before { background: var(--accent); transform: scale(1.3); }
+.news.is-gold .news-dot.is-on::before { background: var(--gold); }
+
+.news-next {
+  width: auto;
+  min-width: 116px;
+  margin-top: 0;
 }
 
 /* ---------- Motion ---------- */

@@ -757,6 +757,10 @@ let ctx = null;   // { mode, type, id, seed, color }
 let lockedAt = 0;
 
 function lockPage() {
+  // Already pinned: scrollY reads 0 while the body is fixed, so locking a
+  // second time (paging a sheet, switching the add type) would forget where
+  // the page actually was and drop it at the top on close.
+  if (document.body.classList.contains('is-locked')) return;
   lockedAt = window.scrollY || 0;
   document.body.style.top = `-${lockedAt}px`;
   document.body.classList.add('is-locked');
@@ -1757,6 +1761,115 @@ for (const ev of ['pointerup', 'pointercancel', 'pointerleave']) {
   document.addEventListener(ev, cancelHold);
 }
 
+/* ---------------- what's next ----------------
+   A short, paged announcement. It opens by itself once per device; the strip
+   above the app keeps it reachable afterwards. Bump NEWS_ID to announce
+   something new and every device sees that one once. */
+
+const NEWS_KEY = 'planner.news';
+const NEWS_ID = 'massive-update-1';
+
+const NEWS_ICONS = {
+  heart: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 20.1C7.6 17.6 4.3 14.5 4.3 10.6a3.9 3.9 0 017.7-1.2 3.9 3.9 0 017.7 1.2c0 3.9-3.3 7-7.7 9.5z"/></svg>',
+  spark: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M11 3.6l1.8 4.9 4.9 1.8-4.9 1.8L11 17l-1.8-4.9L4.3 10.3l4.9-1.8z"/><path d="M18 15.2l.6 1.7 1.7.6-1.7.6-.6 1.7-.6-1.7-1.7-.6 1.7-.6z"/></svg>',
+  shield: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3.4l6.8 2.5v5c0 4.1-2.8 7.4-6.8 9.1-4-1.7-6.8-5-6.8-9.1v-5z"/><path d="M9.3 11.9l1.9 1.9 3.5-3.8"/></svg>'
+};
+
+const NEWS = [
+  {
+    icon: 'heart',
+    eyebrow: 'Thank you',
+    title: 'Thx for using Calendar',
+    body: 'I didn’t expect this to grow so much.'
+  },
+  {
+    icon: 'spark',
+    eyebrow: 'What’s coming',
+    title: 'A massive update',
+    body: 'I’m now building the biggest one yet:',
+    list: [
+      'Fully customizable pages and elements, arranged to your liking',
+      'A bunch of new elements',
+      'Homework that already knows its class — taken from the one you’re in, or the one you just had, so adding it takes seconds',
+      'Better sync'
+    ]
+  },
+  {
+    icon: 'shield',
+    gold: true,
+    eyebrow: 'My promise',
+    title: 'It will always remain free',
+    body: 'I do not plan to add ads or distractions.',
+    note: 'Spread this app as much as possible — thx for the support.'
+  }
+];
+
+/* A read that throws (private mode, storage off) counts as seen: better to
+   stay quiet than to reopen the same announcement on every launch. */
+function newsSeen() {
+  try { return localStorage.getItem(NEWS_KEY) === NEWS_ID; } catch { return true; }
+}
+
+function markNewsSeen() {
+  try { localStorage.setItem(NEWS_KEY, NEWS_ID); } catch {}
+}
+
+function openNews(page = 0, dir = 0) {
+  const n = NEWS[page];
+  const last = page === NEWS.length - 1;
+  // reuses the month-change slides, so paging costs no new keyframes
+  const anim = dir > 0 ? 'anim-right' : dir < 0 ? 'anim-left' : 'anim-soft';
+  const dots = NEWS.map((_, i) =>
+    `<button class="news-dot${i === page ? ' is-on' : ''}" type="button"
+      data-act="news-dot" data-i="${i}" aria-label="Screen ${i + 1} of ${NEWS.length}"
+      ${i === page ? 'aria-current="true"' : ''}></button>`).join('');
+
+  openSheet(`
+    <div class="news${n.gold ? ' is-gold' : ''}">
+      <div class="news-screen ${anim}">
+        <span class="news-icon">${NEWS_ICONS[n.icon]}</span>
+        <p class="news-eyebrow">${n.eyebrow}</p>
+        <h2 class="news-title" id="sheetTitle">${n.title}</h2>
+        <p class="news-body">${n.body}</p>
+        ${n.list ? `<ul class="news-list">${n.list.map(x =>
+          `<li>${TICK}<span>${x}</span></li>`).join('')}</ul>` : ''}
+        ${n.note ? `<p class="news-note">${n.note}</p>` : ''}
+      </div>
+      <div class="news-foot">
+        <span class="news-dots">${dots}</span>
+        ${page ? '<button class="link-btn" type="button" data-act="news-back">Back</button>' : ''}
+        <button class="btn news-next" type="button" data-act="news-next">${last ? 'Got it' : 'Next'}</button>
+      </div>
+    </div>`, { mode: 'news', page, autofocus: false });
+
+  markNewsSeen();
+}
+
+/** Step between screens, staying inside the deck. */
+function newsGo(dir) {
+  if (ctx?.mode !== 'news') return;
+  const page = ctx.page + dir;
+  if (page < 0 || page >= NEWS.length) return;
+  openNews(page, dir);
+}
+
+/* swipe between screens, the same gesture the calendar uses for months */
+let nsx = 0, nsy = 0, nswipe = false;
+sheet.addEventListener('touchstart', e => {
+  if (ctx?.mode !== 'news' || e.touches.length !== 1) return;
+  nsx = e.touches[0].clientX;
+  nsy = e.touches[0].clientY;
+  nswipe = true;
+}, { passive: true });
+
+sheet.addEventListener('touchend', e => {
+  if (!nswipe) return;
+  nswipe = false;
+  const t = e.changedTouches[0];
+  const dx = t.clientX - nsx, dy = t.clientY - nsy;
+  if (Math.abs(dx) > 55 && Math.abs(dx) > Math.abs(dy) * 1.6) newsGo(dx < 0 ? 1 : -1);
+}, { passive: true });
+
 /* ---------------- events ---------------- */
 
 document.addEventListener('click', e => {
@@ -1832,6 +1945,17 @@ document.addEventListener('click', e => {
     case 'type': openAdd({ ...(ctx?.seed || {}), type: el.dataset.type }); break;
     case 'close': closeSheet(); break;
     case 'delete': removeItem(); break;
+
+    case 'news': openNews(0); break;
+    case 'news-back': newsGo(-1); break;
+    case 'news-dot': {
+      const to = +el.dataset.i;
+      if (to !== ctx?.page) openNews(to, to > ctx.page ? 1 : -1);
+      break;
+    }
+    case 'news-next':
+      if (ctx?.page === NEWS.length - 1) closeSheet(); else newsGo(1);
+      break;
 
     case 'period': openPeriodSheet(+el.dataset.period); break;
     case 'pick-plan': openPlanSheet(); break;
@@ -1945,7 +2069,14 @@ document.addEventListener('keydown', e => {
 sheet.addEventListener('submit', e => { e.preventDefault(); submitForm(); });
 sheet.addEventListener('input', e => e.target.classList.remove('is-bad'));
 $('#scrim').addEventListener('click', closeSheet);
-addEventListener('keydown', e => { if (e.key === 'Escape' && !wrap.hidden) closeSheet(); });
+addEventListener('keydown', e => {
+  if (wrap.hidden) return;
+  if (e.key === 'Escape') return closeSheet();
+  // arrow keys page the announcement on a computer
+  if (ctx?.mode !== 'news') return;
+  if (e.key === 'ArrowRight') newsGo(1);
+  else if (e.key === 'ArrowLeft') newsGo(-1);
+});
 
 /** Show the active view with a soft entrance. */
 function showView() {
@@ -2073,6 +2204,12 @@ paintSync();
 if (sync.code) scheduleSync(400);
 startFocusWatch();
 focusTick();
+
+/* Once per device, and never over a focus session or an open sheet. Held
+   back a beat so the app is on screen before it is asked to read anything. */
+if (!newsSeen()) setTimeout(() => {
+  if (wrap.hidden && !focusActive()) openNews(0);
+}, 750);
 
 if ('serviceWorker' in navigator && location.protocol.startsWith('http')) {
   addEventListener('load', () => navigator.serviceWorker.register('sw.js').catch(() => {}));
