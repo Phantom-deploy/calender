@@ -218,7 +218,12 @@ GitHub Pages is https, so that comes free.
 ## Visit counter
 
 The app counts how many times it is opened and how many separate devices that
-adds up to. Nothing identifying is collected: each device makes up a random id,
+adds up to. A visit is one launch, plus one more each time you come back after
+the app has been out of sight for half an hour — without that, an installed
+app (which is resumed rather than reloaded) would be counted once and then
+effectively never again, while someone in a browser tab counts on every open.
+Counting is entirely separate from sync: it happens whether or not sync is
+turned on, and a device syncing every five minutes still registers one visit. Nothing identifying is collected: each device makes up a random id,
 keeps it in its own `localStorage`, and that opaque string is all the server
 ever sees — no IP addresses, no user agents, no fingerprinting, no third-party
 script. If the counter is unreachable the app carries on without noticing.

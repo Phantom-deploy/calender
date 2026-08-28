@@ -336,6 +336,16 @@ and sets `theme-color` and `apple-mobile-web-app-status-bar-style` so iOS does
 not paint a white status bar over a dark app. The dark background is pure
 black so the two meet seamlessly.
 
+## Visit counter
+
+One ping per launch to `/_a/hit` on the sync worker, plus another when the app
+returns after 30+ minutes hidden. Independent of sync — it fires whether or not
+a sync code is set, and syncing never triggers it. The device id lives in
+`planner.vid` and is a random string with no meaning; nothing else is sent.
+
+Failure is silent by design. `/stats.html` reads the numbers back and is gated
+server-side, not in the page — see the README for why.
+
 ## Announcement banner
 
 A pill under the top bar reads **MASSIVE UPDATE COMING SOON · CLICK TO SEE**.

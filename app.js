@@ -2236,10 +2236,18 @@ function visitorId() {
   } catch { return null; }        // storage blocked: this visit simply is not counted
 }
 
+/* A return after this long counts as a fresh visit. An installed app is
+   normally resumed rather than reloaded, so without this its users would be
+   counted once on install and then effectively never again, while someone in
+   a browser tab counts on every open — the two would not be comparable. */
+const VISIT_GAP = 30 * 60000;
+let lastCount = 0;
+
 function countVisit() {
   if (!SYNC_URL || !location.protocol.startsWith('http')) return;
   const v = visitorId();
   if (!v) return;
+  lastCount = Date.now();
   fetch(SYNC_URL.replace(/\/+$/, '') + '/_a/hit', {
     method: 'POST',
     headers: { 'content-type': 'application/json' },
@@ -2252,15 +2260,22 @@ function countVisit() {
   }).catch(() => {});
 }
 
-// After the first paint, and only when the tab is actually being looked at,
-// so a backgrounded prerender never counts as somebody visiting.
-if (document.visibilityState === 'visible') {
-  (window.requestIdleCallback || (f => setTimeout(f, 1200)))(countVisit);
-} else {
-  document.addEventListener('visibilitychange', function once() {
-    if (document.visibilityState !== 'visible') return;
-    document.removeEventListener('visibilitychange', once);
-    countVisit();
-  });
+/* Wait for the page to settle, but never longer than a moment: an idle
+   callback with no deadline can be starved indefinitely on a busy page, and
+   the visit would simply never be counted. */
+function countWhenIdle() {
+  if (window.requestIdleCallback) window.requestIdleCallback(countVisit, { timeout: 3000 });
+  else setTimeout(countVisit, 1200);
 }
+
+// Only count a tab someone is actually looking at, so a background prerender
+// is not mistaken for a person.
+if (document.visibilityState === 'visible') countWhenIdle();
+
+document.addEventListener('visibilitychange', () => {
+  if (document.visibilityState !== 'visible') return;
+  // Either the launch happened in the background and this is the first time
+  // it has been seen, or it is a real return after a long gap.
+  if (!lastCount || Date.now() - lastCount > VISIT_GAP) countWhenIdle();
+});
 })();
