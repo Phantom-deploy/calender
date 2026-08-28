@@ -1,0 +1,245 @@
+<!doctype html>
+<html lang="en" data-theme="light">
+<head>
+<meta charset="utf-8">
+<title>Planner · Stats</title>
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="robots" content="noindex, nofollow, noarchive">
+<meta name="referrer" content="no-referrer">
+<link rel="icon" href="icons/favicon.svg" type="image/svg+xml">
+<link rel="stylesheet" href="app.css">
+<script>
+  try {
+    var t = localStorage.getItem('planner.theme') === 'dark' ? 'dark' : 'light';
+    document.documentElement.dataset.theme = t;
+  } catch (e) {}
+</script>
+<style>
+  main { max-width: 720px; }
+  .s-head { margin: 26px 4px 18px; }
+  .s-head h1 { margin: 0; font-size: 26px; font-weight: 750; letter-spacing: -0.025em; }
+  .s-head p { margin: 5px 0 0; color: var(--muted); font-size: 14.5px; }
+
+  .s-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-top: 18px; }
+  @media (min-width: 560px) { .s-grid { grid-template-columns: repeat(4, 1fr); } }
+
+  .s-tile {
+    background: var(--surface);
+    border-radius: var(--r-card);
+    box-shadow: var(--shadow-card);
+    padding: 16px 15px;
+  }
+  .s-tile .k {
+    font-size: 11px; font-weight: 700; letter-spacing: .09em; text-transform: uppercase;
+    color: var(--muted);
+  }
+  .s-tile .n {
+    margin-top: 7px; font-size: clamp(26px, 7vw, 34px); font-weight: 750;
+    line-height: 1.05; letter-spacing: -0.03em; font-variant-numeric: tabular-nums;
+  }
+  .s-tile .n.accent { color: var(--accent); }
+  .s-tile .sub { margin-top: 3px; font-size: 12.5px; color: var(--muted); }
+
+  /* 30-day bars */
+  .chart { display: flex; align-items: flex-end; gap: 3px; height: 130px; padding: 4px 2px 0; }
+  .chart .col { flex: 1 1 0; min-width: 0; display: flex; flex-direction: column;
+                justify-content: flex-end; gap: 2px; height: 100%; }
+  .bar { border-radius: 3px 3px 0 0; background: var(--accent); min-height: 2px;
+         transform-origin: bottom; animation: growUp .5s var(--ease) both; }
+  .bar.u { background: color-mix(in srgb, var(--accent) 34%, transparent); }
+  @keyframes growUp { from { transform: scaleY(0); opacity: 0; } }
+
+  .axis { display: flex; justify-content: space-between; margin-top: 8px;
+          font-size: 11.5px; color: var(--muted); }
+  .legend { display: flex; gap: 14px; margin-top: 12px; font-size: 12.5px; color: var(--muted); }
+  .legend i { display: inline-block; width: 9px; height: 9px; border-radius: 2px;
+              background: var(--accent); margin-right: 6px; }
+  .legend i.u { background: color-mix(in srgb, var(--accent) 34%, transparent); }
+
+  .gate { max-width: 380px; margin: 16vh auto 0; text-align: center; }
+  .gate .lock {
+    width: 54px; height: 54px; margin: 0 auto 18px; border-radius: 18px; display: grid;
+    place-items: center; background: var(--accent-soft); color: var(--accent);
+  }
+  .gate .lock svg { width: 26px; height: 26px; }
+  .gate h1 { margin: 0 0 6px; font-size: 21px; font-weight: 750; letter-spacing: -0.02em; }
+  .gate p { margin: 0 0 20px; color: var(--muted); font-size: 14.5px; }
+  .err { color: var(--danger); font-size: 14px; min-height: 20px; margin: 10px 0 0; }
+  .foot { margin: 26px 4px 40px; font-size: 12.5px; color: var(--muted); line-height: 1.6; }
+  [hidden] { display: none !important; }
+</style>
+</head>
+<body>
+
+<main>
+  <!-- password gate -->
+  <section id="gate" class="gate">
+    <span class="lock">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9"
+           stroke-linecap="round" stroke-linejoin="round">
+        <rect x="4.5" y="10.5" width="15" height="10" rx="2.5"/>
+        <path d="M8.2 10.5V7.8a3.8 3.8 0 017.6 0v2.7"/>
+      </svg>
+    </span>
+    <h1>Stats</h1>
+    <p>Private. Enter the password to continue.</p>
+    <form id="form" novalidate>
+      <div class="field">
+        <input id="pw" type="password" placeholder="Password" autocomplete="current-password"
+               autocapitalize="off" autocorrect="off" spellcheck="false" enterkeyhint="go">
+      </div>
+      <button class="btn" type="submit" id="go">Unlock</button>
+    </form>
+    <p class="err" id="err"></p>
+  </section>
+
+  <!-- dashboard -->
+  <section id="dash" hidden>
+    <div class="s-head">
+      <h1>Stats</h1>
+      <p id="updated">—</p>
+    </div>
+
+    <div class="s-grid">
+      <div class="s-tile"><div class="k">Unique people</div>
+        <div class="n accent" id="uniq">—</div><div class="sub">all time</div></div>
+      <div class="s-tile"><div class="k">Total visits</div>
+        <div class="n" id="total">—</div><div class="sub">all time</div></div>
+      <div class="s-tile"><div class="k">Today</div>
+        <div class="n" id="tvis">—</div><div class="sub" id="tuni">—</div></div>
+      <div class="s-tile"><div class="k">Last 30 days</div>
+        <div class="n" id="mvis">—</div><div class="sub" id="muni">—</div></div>
+    </div>
+
+    <div class="section-head"><h2>Last 30 days</h2></div>
+    <div class="card" style="padding:16px 14px 14px">
+      <div class="chart" id="chart"></div>
+      <div class="axis"><span id="ax0">—</span><span id="ax1">today</span></div>
+      <div class="legend">
+        <span><i></i>Visits</span><span><i class="u"></i>Unique devices</span>
+      </div>
+    </div>
+
+    <div class="section-head"><h2>Installed</h2></div>
+    <div class="card" style="padding:16px 15px">
+      <div class="s-tile" style="box-shadow:none;background:none;padding:0">
+        <div class="n" id="inst">—</div>
+        <div class="sub">visits in the last 30 days opened from a home screen rather than a browser tab</div>
+      </div>
+    </div>
+
+    <p class="foot">
+      A visit is one launch of the app. Unique people are counted by a random id each
+      device generates for itself and stores locally — clearing site data or using a
+      second device counts as a new one, and nothing here identifies anybody.
+      Days are UTC.
+    </p>
+    <button class="btn is-ghost" id="out">Lock again</button>
+  </section>
+</main>
+
+<script>
+(() => {
+'use strict';
+
+/* Where the counter lives. Same worker as sync. */
+const API = 'https://planner-sync.aryan-malik8u8.workers.dev';
+const TOK_KEY = 'planner.admin.tok';
+
+const $ = s => document.querySelector(s);
+const enc = new TextEncoder();
+const nf = new Intl.NumberFormat();
+
+/* The password is turned into a token here and never sent anywhere as typed.
+   The server holds only a hash of that token, so it cannot recover the
+   password either — and the real check happens there, not in this file. */
+async function deriveToken(pw, salt, iter) {
+  const base = await crypto.subtle.importKey('raw', enc.encode(pw), 'PBKDF2', false, ['deriveBits']);
+  const bits = await crypto.subtle.deriveBits(
+    { name: 'PBKDF2', salt: enc.encode(salt), iterations: iter, hash: 'SHA-256' }, base, 256);
+  return btoa(String.fromCharCode(...new Uint8Array(bits)));
+}
+
+async function load(token) {
+  const r = await fetch(API.replace(/\/+$/, '') + '/_a/stats', {
+    headers: { 'x-admin': token }, cache: 'no-store'
+  });
+  if (r.status === 401) throw new Error('wrong');
+  if (!r.ok) throw new Error('server ' + r.status);
+  return r.json();
+}
+
+function paint(d) {
+  $('#uniq').textContent = nf.format(d.uniqueVisitors);
+  $('#total').textContent = nf.format(d.totalVisits);
+  $('#tvis').textContent = nf.format(d.today.visits);
+  $('#tuni').textContent = nf.format(d.today.uniques) + ' unique';
+
+  const mv = d.days.reduce((s, x) => s + x.visits, 0);
+  const mu = d.days.reduce((s, x) => s + x.uniques, 0);
+  const mi = d.days.reduce((s, x) => s + x.installed, 0);
+  $('#mvis').textContent = nf.format(mv);
+  $('#muni').textContent = nf.format(mu) + ' unique-days';
+  $('#inst').textContent = mv ? Math.round(mi / mv * 100) + '%' : '—';
+
+  const peak = Math.max(1, ...d.days.map(x => x.visits));
+  $('#chart').innerHTML = d.days.map((x, i) => {
+    const v = Math.round(x.visits / peak * 100);
+    const u = Math.round(x.uniques / peak * 100);
+    return `<span class="col" title="${x.day} · ${x.visits} visits · ${x.uniques} unique">
+      <span class="bar" style="height:${Math.max(v - u, 0)}%;animation-delay:${i * 12}ms"></span>
+      <span class="bar u" style="height:${u}%;animation-delay:${i * 12}ms"></span>
+    </span>`;
+  }).join('');
+
+  $('#ax0').textContent = d.days[0].day.slice(5);
+  $('#updated').textContent = 'Updated ' + new Date().toLocaleTimeString();
+  $('#gate').hidden = true;
+  $('#dash').hidden = false;
+}
+
+async function unlock(token, remember) {
+  const data = await load(token);
+  if (remember) { try { sessionStorage.setItem(TOK_KEY, token); } catch {} }
+  paint(data);
+}
+
+$('#form').addEventListener('submit', async e => {
+  e.preventDefault();
+  const pw = $('#pw').value;
+  if (!pw) return;
+  const btn = $('#go');
+  btn.disabled = true;
+  btn.textContent = 'Checking…';
+  $('#err').textContent = '';
+  try {
+    // salt and iteration count are public parameters; the password is not
+    const token = await deriveToken(pw, 'planner.admin.v2', 210000);
+    await unlock(token, true);
+  } catch (err) {
+    $('#err').textContent = err.message === 'wrong'
+      ? 'That password is not right.'
+      : 'Could not reach the server.';
+    $('#pw').select();
+  } finally {
+    btn.disabled = false;
+    btn.textContent = 'Unlock';
+  }
+});
+
+$('#out').addEventListener('click', () => {
+  try { sessionStorage.removeItem(TOK_KEY); } catch {}
+  location.reload();
+});
+
+/* Straight back in on a refresh, but only for this tab session. */
+(async () => {
+  let t = null;
+  try { t = sessionStorage.getItem(TOK_KEY); } catch {}
+  if (!t) return;
+  try { await unlock(t, false); } catch { try { sessionStorage.removeItem(TOK_KEY); } catch {} }
+})();
+})();
+</script>
+</body>
+</html>

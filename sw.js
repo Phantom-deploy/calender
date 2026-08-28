@@ -1,5 +1,5 @@
 /* Offline shell. Bump CACHE when any asset changes. */
-const CACHE = 'planner-v15';
+const CACHE = 'planner-v16';
 const ASSETS = [
   './',
   'index.html',
@@ -29,7 +29,10 @@ self.addEventListener('activate', e => {
 /* Serve from cache immediately, refresh in the background. */
 self.addEventListener('fetch', e => {
   const req = e.request;
-  if (req.method !== 'GET' || new URL(req.url).origin !== location.origin) return;
+  const url = new URL(req.url);
+  if (req.method !== 'GET' || url.origin !== location.origin) return;
+  // The stats page is admin-only and must never be served from a stale cache.
+  if (url.pathname.endsWith('/stats.html')) return;
 
   e.respondWith(
     caches.match(req, { ignoreSearch: true }).then(hit => {

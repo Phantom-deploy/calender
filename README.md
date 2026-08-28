@@ -34,7 +34,8 @@ Screen**. It then launches standalone, without Safari's chrome, and works offlin
 | `icons/` | Generated app icons |
 | `tools/make_icons.py` | Regenerates the icons (`python3 tools/make_icons.py`) |
 | `bell.js` | Del Norte bell schedules, by weekday and by date |
-| `sync/worker.js` | The entire sync server: one encrypted blob per code |
+| `sync/worker.js` | The entire sync server: one encrypted blob per code, plus the visit counter |
+| `stats.html` | Private visit stats. Not linked from the app; open it by URL |
 
 ## Behavior worth knowing
 
@@ -213,6 +214,38 @@ new `rev`, or `409` with the current record if `rev` is stale.
 
 Sync needs a secure context (https, or localhost) because it uses WebCrypto.
 GitHub Pages is https, so that comes free.
+
+## Visit counter
+
+The app counts how many times it is opened and how many separate devices that
+adds up to. Nothing identifying is collected: each device makes up a random id,
+keeps it in its own `localStorage`, and that opaque string is all the server
+ever sees — no IP addresses, no user agents, no fingerprinting, no third-party
+script. If the counter is unreachable the app carries on without noticing.
+
+The read-out lives at **`/stats.html`**. It is not linked from anywhere in the
+app, is marked `noindex`, and is left out of the offline cache. Open it
+directly and enter the password.
+
+The password is not stored anywhere, in this repo or on the server. The browser
+runs it through PBKDF2 (210k iterations) to get a token, and the worker holds
+only the SHA-256 of that token — so the check happens on the server, where it
+cannot be edited away. A static page's own password prompt is only a UI: the
+gate has to be the API, or anyone could just read the file.
+
+To change the password, derive a new verifier and replace `ADMIN_SHA` in
+`sync/worker.js` (or better, set it as a secret so it never enters git):
+
+```bash
+npx wrangler secret put ADMIN_SHA
+```
+
+**The worker must be redeployed before any of this works** — the counter lives
+in a new Durable Object:
+
+```bash
+cd sync && npx wrangler deploy
+```
 
 ## Data
 

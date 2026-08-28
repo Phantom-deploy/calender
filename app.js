@@ -2214,4 +2214,53 @@ if (!newsSeen()) setTimeout(() => {
 if ('serviceWorker' in navigator && location.protocol.startsWith('http')) {
   addEventListener('load', () => navigator.serviceWorker.register('sw.js').catch(() => {}));
 }
+
+/* ---------------- visit counting ----------------
+   Counts one visit per launch, and enough to tell how many separate devices
+   that adds up to. The id is a random string this device makes up for itself
+   and keeps locally; it says nothing about who you are, and nothing else is
+   collected — no IP, no location, no third-party script. Failure is silent
+   and never blocks anything: if the counter is down, the app does not care. */
+
+const VID_KEY = 'planner.vid';
+
+function visitorId() {
+  try {
+    let id = localStorage.getItem(VID_KEY);
+    if (!id) {
+      const r = crypto.getRandomValues(new Uint8Array(12));
+      id = [...r].map(b => b.toString(36).padStart(2, '0')).join('').slice(0, 20);
+      localStorage.setItem(VID_KEY, id);
+    }
+    return id;
+  } catch { return null; }        // storage blocked: this visit simply is not counted
+}
+
+function countVisit() {
+  if (!SYNC_URL || !location.protocol.startsWith('http')) return;
+  const v = visitorId();
+  if (!v) return;
+  fetch(SYNC_URL.replace(/\/+$/, '') + '/_a/hit', {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({
+      v,
+      // whether it was opened as an installed app rather than a browser tab
+      s: matchMedia('(display-mode: standalone)').matches || navigator.standalone === true
+    }),
+    keepalive: true
+  }).catch(() => {});
+}
+
+// After the first paint, and only when the tab is actually being looked at,
+// so a backgrounded prerender never counts as somebody visiting.
+if (document.visibilityState === 'visible') {
+  (window.requestIdleCallback || (f => setTimeout(f, 1200)))(countVisit);
+} else {
+  document.addEventListener('visibilitychange', function once() {
+    if (document.visibilityState !== 'visible') return;
+    document.removeEventListener('visibilitychange', once);
+    countVisit();
+  });
+}
 })();

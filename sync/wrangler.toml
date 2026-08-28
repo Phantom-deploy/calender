@@ -6,6 +6,15 @@ compatibility_date = "2025-06-01"
 name = "SYNC_DO"
 class_name = "SyncRecord"
 
+# One shared instance counts visits for the whole site.
+[[durable_objects.bindings]]
+name = "STATS_DO"
+class_name = "Stats"
+
 [[migrations]]
 tag = "v1"
 new_sqlite_classes = ["SyncRecord"]
+
+[[migrations]]
+tag = "v2"
+new_sqlite_classes = ["Stats"]
