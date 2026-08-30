@@ -730,10 +730,40 @@ function recurHTML() {
 
 /* -- calendar -- */
 
+/* ---------------- dated lists ----------------
+   A day is stated once, as its own heading, with everything that falls on it
+   grouped underneath — instead of a flat run of rows each repeating its own
+   date. Multiple items on one day read as one day, and the eye can find a
+   date without reading every line. */
+function dayGroupsHTML(list, opts = {}) {
+  const byDay = new Map();
+  for (const x of list) {
+    const d = x.date || x.item.due || x.item.date;
+    if (!d) continue;
+    if (!byDay.has(d)) byDay.set(d, []);
+    byDay.get(d).push(x);
+  }
+  return [...byDay.entries()].sort((a, b) => a[0] < b[0] ? -1 : 1).map(([d, items]) => {
+    const dt = parseISO(d);
+    const rel = relLabel(d);
+    const wd = dt.toLocaleDateString(undefined, { weekday: 'long' });
+    return `<section class="dg${d === today() ? ' is-today' : ''}${d < today() ? ' is-past' : ''}">
+      <header class="dg-h">
+        <span class="dg-date"><b>${dt.getDate()}</b><i>${dt.toLocaleDateString(undefined, { month: 'short' })}</i></span>
+        <span class="dg-when"><b>${wd}</b>${rel && rel.toLowerCase() !== wd.toLowerCase() ? `<i>${esc(rel)}</i>` : ''}</span>
+        <span class="dg-n">${items.length}</span>
+      </header>
+      <div class="dg-list">${items.map(x => rowHTML(x, { ...opts, hideDate: true })).join('')}</div>
+    </section>`;
+  }).join('');
+}
+
 function upcomingHTML() {
   const soon = upcoming(today());
-  return `<section class="panel"><div class="panel-head"><h2>Coming up</h2></div>
-    ${soon.length ? soon.map(x => rowHTML(x)).join('') : `<p class="empty">Three quiet weeks ahead.</p>`}</section>`;
+  return `<section class="panel${soon.length ? ' is-grouped' : ''}"><div class="panel-head"><h2>Coming up</h2>
+      ${soon.length ? `<span class="count">${soon.length}</span>` : ''}</div>
+    ${soon.length ? dayGroupsHTML(soon)
+      : `<p class="empty">Three quiet weeks ahead \u2014 nothing due, no dates set.</p>`}</section>`;
 }
 
 function weekcalHTML() {
@@ -753,10 +783,11 @@ function weekcalHTML() {
 }
 
 function datesHTML() {
-  const list = db.events.filter(e => e.date >= today()).sort((a, b) => a.date < b.date ? -1 : 1).slice(0, 6);
-  return `<section class="panel"><div class="panel-head"><h2>Important dates</h2>
+  const list = db.events.filter(e => e.date >= today()).sort((a, b) => a.date < b.date ? -1 : 1).slice(0, 8);
+  return `<section class="panel${list.length ? ' is-grouped' : ''}"><div class="panel-head"><h2>Important dates</h2>
       <button class="link-btn" data-act="add" data-type="event">Add</button></div>
-    ${list.length ? list.map(e => rowHTML({ kind: 'event', item: e })).join('') : `<p class="empty">No dates on the horizon.</p>`}</section>`;
+    ${list.length ? dayGroupsHTML(list.map(e => ({ kind: 'event', item: e, date: e.date })))
+      : `<p class="empty">No dates on the horizon. Add one and it shows up here.</p>`}</section>`;
 }
 
 function testsHTML() {
@@ -1489,15 +1520,29 @@ function blockWrap(b) {
   if (!def) return '';
   const body = def.html(b.cfg || {}, b);
   if (!state.edit) return body;
+  const pg = activePage();
+  const i = pg.blocks.findIndex(x => x.id === b.id);
+  const last = pg.blocks.length - 1;
   return `<div class="blk" data-bid="${b.id}">
     <div class="blk-bar">
       <span class="blk-handle" data-drag aria-label="Drag to reorder">
         <svg viewBox="0 0 24 24"><path d="M9 6h.01M9 12h.01M9 18h.01M15 6h.01M15 12h.01M15 18h.01"/></svg>
       </span>
-      <button class="blk-name" data-act="blk-opts" data-bid="${b.id}" type="button">${def.n}</button>
-      <button class="blk-x" data-act="blk-del" data-bid="${b.id}" type="button" aria-label="Remove block">
-        <svg viewBox="0 0 24 24"><path d="M6 6l12 12M18 6L6 18"/></svg>
-      </button>
+      <span class="blk-name">${def.n}</span>
+      <span class="blk-acts">
+        <button class="blk-a" data-act="blk-move" data-dir="-1" data-bid="${b.id}" type="button"
+          aria-label="Move up"${i <= 0 ? ' disabled' : ''}>
+          <svg viewBox="0 0 24 24"><path d="M12 19V6M6 12l6-6 6 6"/></svg></button>
+        <button class="blk-a" data-act="blk-move" data-dir="1" data-bid="${b.id}" type="button"
+          aria-label="Move down"${i >= last ? ' disabled' : ''}>
+          <svg viewBox="0 0 24 24"><path d="M12 5v13M6 12l6 6 6-6"/></svg></button>
+        <button class="blk-a" data-act="blk-dup" data-bid="${b.id}" type="button" aria-label="Duplicate">
+          <svg viewBox="0 0 24 24"><path d="M9 9h10v10H9z"/><path d="M15 5.5H5v10"/></svg></button>
+        <button class="blk-a" data-act="blk-opts" data-bid="${b.id}" type="button" aria-label="Block settings">
+          <svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="3.3"/><path d="M12 2.6l1.35 2.02 2.4-.62.5 2.42 2.42.5-.62 2.4L20.07 11a10 10 0 010 2l-2.02 1.35.62 2.4-2.42.5-.5 2.42-2.4-.62L12 21.4l-1.35-2.02-2.4.62-.5-2.42-2.42-.5.62-2.4L3.93 13a10 10 0 010-2l2.02-1.35-.62-2.4 2.42-.5.5-2.42 2.4.62z"/></svg></button>
+        <button class="blk-a is-del" data-act="blk-del" data-bid="${b.id}" type="button" aria-label="Remove block">
+          <svg viewBox="0 0 24 24"><path d="M6 6l12 12M18 6L6 18"/></svg></button>
+      </span>
     </div>
     <div class="blk-body">${body}</div>
   </div>`;
@@ -1506,7 +1551,11 @@ function blockWrap(b) {
 function pageHTML(p) {
   let html = p.blocks.map(blockWrap).join('');
   if (state.edit) {
-    if (!p.blocks.length) html += `<p class="empty">An empty page. Add your first block.</p>`;
+    if (!p.blocks.length) html += `<div class="pg-blank">
+      <b>Nothing on this page yet</b>
+      <span>Blocks are the pieces a page is made of \u2014 a timer, a list, a
+        calendar, a button. Add one and it appears right here.</span>
+    </div>`;
     html += `<button class="add-blk" data-act="blk-add" type="button">${PLUS}<span>Add block</span></button>
       <div class="card gap-lg"><button class="row" data-act="pg-manage">
         <span class="row-main"><span class="row-title accent">Pages\u2026</span>
@@ -1577,25 +1626,43 @@ function replay(el, cls) {
   el.classList.add(cls);
 }
 
+/* The selected day, then what surrounds it. The day you picked is stated once
+   at the top and its items sit directly under it; overdue and upcoming are
+   clearly separate sections rather than more rows in the same run. */
 function agendaHTML() {
   const sel = state.selected;
   const isToday = sel === today();
-  const rows = itemsOn(sel).map(x => rowHTML(x)).join('');
+  const dt = parseISO(sel);
+  const items = itemsOn(sel);
+  const plan = planForDate(sel);
 
-  let html = `<div class="section-head"><h2>${isToday ? 'Today' : dateLabel(sel)}</h2>
-    <button class="link-btn" data-act="add">Add</button></div>`;
-  html += rows ? `<div class="card">${rows}</div>` : `<p class="empty">Nothing on this day.</p>`;
+  let html = `<section class="dsel">
+    <header class="dsel-h">
+      <span class="dsel-date"><b>${dt.getDate()}</b><i>${dt.toLocaleDateString(undefined, { month: 'short' })}</i></span>
+      <span class="dsel-when">
+        <b>${isToday ? 'Today' : dt.toLocaleDateString(undefined, { weekday: 'long' })}</b>
+        <i>${isToday ? dt.toLocaleDateString(undefined, { weekday: 'long', month: 'long', day: 'numeric' })
+          : dt.toLocaleDateString(undefined, { month: 'long', day: 'numeric' })}${plan ? ` \u00b7 ${esc(plan.name)}` : ''}</i>
+      </span>
+      <button class="dsel-add" data-act="add" type="button" aria-label="Add to this day">${PLUS}</button>
+    </header>
+    ${items.length
+      ? `<div class="dsel-list">${items.map(x => rowHTML(x, { hideDate: true })).join('')}</div>`
+      : `<p class="dsel-empty">Nothing on this day yet.
+          <button class="link-btn" data-act="add" type="button">Add something</button></p>`}
+  </section>`;
 
   if (isToday) {
     const late = db.homework.filter(h => !h.done && h.due < sel).sort((a, b) => a.due < b.due ? -1 : 1);
     if (late.length) {
-      html += `<div class="section-head"><h2>Overdue</h2></div><div class="card">` +
-        late.map(h => rowHTML({ kind: 'homework', item: h })).join('') + `</div>`;
+      html += `<section class="panel is-late-sec is-grouped"><div class="panel-head"><h2>Overdue</h2>
+          <span class="count">${late.length}</span></div>
+        ${dayGroupsHTML(late.map(h => ({ kind: 'homework', item: h, date: h.due })))}</section>`;
     }
     const soon = upcoming(sel);
     if (soon.length) {
-      html += `<div class="section-head"><h2>Upcoming</h2></div><div class="card">` +
-        soon.map(x => rowHTML(x)).join('') + `</div>`;
+      html += `<section class="panel is-grouped"><div class="panel-head"><h2>Coming up</h2>
+          <span class="count">${soon.length}</span></div>${dayGroupsHTML(soon)}</section>`;
     }
   }
   return html;
@@ -1617,9 +1684,12 @@ function rowHTML({ kind, item }, opts = {}) {
   if (kind === 'homework') {
     const late = !item.done && item.due < today();
     // inside a class the class name is redundant; show the details instead
-    const sub = opts.hideClass
-      ? [relLabel(item.due), item.details].filter(Boolean).join(' · ')
-      : `${className(item.classId)} · ${relLabel(item.due)}`;
+    // under a day heading the date is already stated, so repeating it on every
+    // row is noise; the same goes for the class name inside a class page
+    const parts = opts.hideClass ? [] : [className(item.classId)];
+    if (!opts.hideDate) parts.push(relLabel(item.due));
+    if (opts.hideClass && item.details) parts.push(item.details);
+    const sub = parts.filter(Boolean).join(' · ');
     // `open` also sits on the outer div: the chevron and its padding are
     // outside the row-main button, so without it those areas look tappable
     // (the chevron says so) but silently do nothing.
@@ -1637,12 +1707,13 @@ function rowHTML({ kind, item }, opts = {}) {
       <span class="swatch" style="background:${PROJECT_COLOR}"></span>
       <span class="row-main">
         <span class="row-title">${esc(item.name)}</span>
-        <span class="row-sub">${st.label} · ${relLabel(item.due)}</span>
+        <span class="row-sub">${opts.hideDate ? st.label : `${st.label} · ${relLabel(item.due)}`}</span>
       </span><span class="tag">Project</span>${CHEV}</button>`;
   }
 
   if (kind === 'event') {
-    const sub = item.classId ? `${className(item.classId)} · ${relLabel(item.date)}` : relLabel(item.date);
+    const sub = [item.classId ? className(item.classId) : '',
+      opts.hideDate ? '' : relLabel(item.date)].filter(Boolean).join(' · ') || 'Date';
     return `<button class="row" ${open}>
       <span class="swatch" style="background:${item.classId ? classColor(item.classId) : EVENT_COLOR}"></span>
       <span class="row-main">
@@ -3444,57 +3515,135 @@ const PAGE_TMPLS = [
   { id: 'min', n: 'Minimal', d: 'A timer and one list. That\u2019s it.', icon: '\u25cb', blocks: ['hero', 'due'] }
 ];
 
-/* The block picker: seven collapsible sections, a search box, and a live
-   preview of every block rendered from your real data. Only open sections
-   render, so sixty-plus blocks stay cheap. */
-const pickerUI = { q: '', open: new Set(['live']) };
+/* ---------------- the block organizer ----------------
+   One category at a time: the tab strip is the only navigation, so the list
+   you are reading is the only list on screen. Search cuts across every
+   category and takes the view over while it holds a query. Previews are real
+   renders of your own data, opened one at a time — sixty-odd live blocks all
+   rendering at once is what made the old picker heavy. */
+const pickerUI = { q: '', tab: 'all', prev: '', added: null };
+
+/* one glyph per family, so a block's category is legible before you read it */
+const CAT_ICON = {
+  live: '<svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="8.4"/><path d="M12 7.6V12l3 1.8"/></svg>',
+  work: '<svg viewBox="0 0 24 24"><path d="M5 5.5h14v14H5z"/><path d="M8.6 12l2.3 2.3 4.4-4.6"/></svg>',
+  cal: '<svg viewBox="0 0 24 24"><path d="M4.6 6.6h14.8v13H4.6z"/><path d="M4.6 10.6h14.8M9 4.4v3.4M15 4.4v3.4"/></svg>',
+  notes: '<svg viewBox="0 0 24 24"><path d="M6 4.6h9.5L18.4 8v11.4H6z"/><path d="M9 11h6M9 14.6h4"/></svg>',
+  well: '<svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="7.6"/><circle cx="12" cy="12" r="2.6"/></svg>',
+  prog: '<svg viewBox="0 0 24 24"><path d="M5 18.5V13M12 18.5V6.4M19 18.5v-8"/></svg>',
+  util: '<svg viewBox="0 0 24 24"><path d="M4.8 5.6h14.4M4.8 12h14.4M4.8 18.4h9"/></svg>'
+};
 
 function bpPreview(def) {
   let h = '';
   try { h = def.html({}) || ''; } catch {}
-  return h || `<p class="empty">Appears only when it has something to say.</p>`;
+  return h || `<p class="empty">This one appears only when it has something to say.</p>`;
 }
 
-function bpRow([t, def]) {
-  return `<button class="bp" data-act="blk-pick" data-t="${t}" type="button">
-    <span class="bp-info"><b>${def.n}</b><i>${def.d}</i><em>\u2726 ${def.sm}</em></span>
-    <span class="bp-prev"><span class="bp-scale">${bpPreview(def)}</span></span>
-  </button>`;
+/** How many of each block the page already carries, so the list can say so. */
+function bpOnPage() {
+  const m = new Map();
+  for (const b of activePage().blocks) m.set(b.t, (m.get(b.t) | 0) + 1);
+  return m;
+}
+
+function bpCard([t, def], onPage) {
+  const open = pickerUI.prev === t;
+  const n = onPage.get(t) | 0;
+  return `<div class="bpc${open ? ' is-open' : ''}" data-t="${t}">
+    <div class="bpc-top">
+      <span class="bpc-ico" data-c="${def.c}">${CAT_ICON[def.c] || ''}</span>
+      <span class="bpc-txt">
+        <b>${def.n}</b>
+        <i>${def.d}</i>
+      </span>
+      ${pickerUI.added && pickerUI.added.t === t
+        ? `<span class="bpc-done"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 12.5l4.5 4.5L19 7.5"/></svg>Added</span>`
+        : `<button class="bpc-add" data-act="blk-pick" data-t="${t}" type="button">Add</button>`}
+    </div>
+    <p class="bpc-sm">${def.sm}</p>
+    <div class="bpc-foot">
+      <button class="bpc-pv" data-act="bp-prev" data-t="${t}" type="button" aria-expanded="${open}">
+        <span>${open ? 'Hide preview' : 'Preview'}</span>${CHEV}</button>
+      ${pickerUI.added && pickerUI.added.t === t
+        ? `<button class="bpc-undo" data-act="bp-undo" type="button">Undo</button>`
+        : n ? `<span class="bpc-on">${n === 1 ? 'On this page' : n + ' on this page'}</span>` : ''}
+    </div>
+    ${open ? `<div class="bpc-prev"><div class="bpc-frame">${bpPreview(def)}</div></div>` : ''}
+  </div>`;
+}
+
+/** The tab strip: All, then one tab per family, each carrying its count. */
+function bpTabsHTML() {
+  const counts = {};
+  for (const d of Object.values(BLOCKS)) counts[d.c] = (counts[d.c] | 0) + 1;
+  const tabs = [['all', 'All', Object.keys(BLOCKS).length]]
+    .concat(Object.entries(CAT).map(([k, l]) => [k, l.split(' ')[0], counts[k] | 0]));
+  return tabs.map(([k, label, n]) =>
+    `<button class="bp-tab${pickerUI.tab === k ? ' is-on' : ''}" data-act="bp-tab" data-cat="${k}"
+      role="tab" aria-selected="${pickerUI.tab === k}" type="button">${label}<i>${n}</i></button>`).join('');
 }
 
 function paintPicker() {
   const body = sheet.querySelector('#bp-body');
+  const tabs = sheet.querySelector('#bp-tabs');
   if (!body) return;
+  const onPage = bpOnPage();
   const qy = pickerUI.q.trim().toLowerCase();
+
+  if (tabs) {
+    tabs.innerHTML = bpTabsHTML();
+    tabs.hidden = !!qy;                       // search speaks for the whole list
+    tabs.querySelector('.is-on')?.scrollIntoView({ block: 'nearest', inline: 'center' });
+  }
+
   if (qy) {
     const hits = Object.entries(BLOCKS).filter(([, d]) =>
       (d.n + ' ' + d.d + ' ' + d.sm).toLowerCase().includes(qy));
     body.innerHTML = hits.length
-      ? `<div class="bp-list">${hits.map(bpRow).join('')}</div>`
-      : `<p class="empty">No block matches \u201c${esc(pickerUI.q)}\u201d.</p>`;
+      ? `<p class="bp-count">${hits.length} ${hits.length === 1 ? 'block' : 'blocks'} match \u201c${esc(pickerUI.q.trim())}\u201d</p>
+         <div class="bp-list">${hits.map(e => bpCard(e, onPage)).join('')}</div>`
+      : `<div class="bp-none"><b>Nothing matches \u201c${esc(pickerUI.q.trim())}\u201d</b>
+           <span>Try a word like timer, due, notes or streak \u2014 or browse the tabs.</span>
+           <button class="btn is-ghost" data-act="bp-clear" type="button">Clear search</button></div>`;
     return;
   }
-  body.innerHTML = Object.entries(CAT).map(([key, label]) => {
-    const items = Object.entries(BLOCKS).filter(([, d]) => d.c === key);
-    const openSec = pickerUI.open.has(key);
-    return `<button class="bp-sec${openSec ? ' is-open' : ''}" data-act="bp-sec" data-cat="${key}" type="button">
-        <span>${label}</span><i>${items.length}</i>${CHEV}</button>
-      ${openSec ? `<div class="bp-list" id="sec-${key}">${items.map(bpRow).join('')}</div>` : ''}`;
-  }).join('');
+
+  if (pickerUI.tab === 'all') {
+    body.innerHTML = Object.entries(CAT).map(([key, label]) => {
+      const items = Object.entries(BLOCKS).filter(([, d]) => d.c === key);
+      return `<div class="bp-group">
+        <div class="bp-gh"><h3>${label}</h3><span>${items.length}</span></div>
+        <div class="bp-list">${items.map(e => bpCard(e, onPage)).join('')}</div>
+      </div>`;
+    }).join('');
+    return;
+  }
+
+  // the selected tab already names this family and carries its count, so the
+  // heading that would sit here is the same words a second time
+  const items = Object.entries(BLOCKS).filter(([, d]) => d.c === pickerUI.tab);
+  body.innerHTML = `<div class="bp-group">
+      <div class="bp-list">${items.map(e => bpCard(e, onPage)).join('')}</div>
+    </div>`;
 }
 
 function openBlockPicker() {
   pickerUI.q = '';
+  pickerUI.prev = '';
+  pickerUI.added = null;
   openSheet(`
-    <div class="sheet-head"><h2 id="sheetTitle">Add a block</h2>
-      <button class="link-btn" data-act="close" type="button">Done</button></div>
-    <div class="field bp-search"><input id="bp-q" type="search" placeholder="Search ${Object.keys(BLOCKS).length} blocks\u2026"
-      autocapitalize="off" autocorrect="off"></div>
-    <div class="bp-chips">${Object.entries(CAT).map(([k, l]) =>
-      `<button class="chip" data-act="bp-jump" data-cat="${k}" type="button">${l.split(' ')[0]}</button>`).join('')}</div>
+    <div class="bp-bar">
+      <div class="sheet-head"><h2 id="sheetTitle">Add a block</h2>
+        <button class="link-btn" data-act="close" type="button">Done</button></div>
+      <div class="field bp-search"><input id="bp-q" type="search"
+        placeholder="Search ${Object.keys(BLOCKS).length} blocks\u2026"
+        autocapitalize="off" autocorrect="off"></div>
+      <div class="bp-tabs" id="bp-tabs" role="tablist"></div>
+    </div>
     <div id="bp-body"></div>`, { mode: 'blk-add', autofocus: false });
   paintPicker();
-  tip('picker', '.sheet .bp-search', { round: 16, delay: 520 });
+  tip('picker', '.sheet .bp-bar', { round: 16, delay: 520 });
 }
 
 function openBlockOpts(id) {
@@ -3502,18 +3651,33 @@ function openBlockOpts(id) {
   const b = pg.blocks.find(x => x.id === id);
   if (!b) return;
   const def = BLOCKS[b.t];
+  const i = pg.blocks.findIndex(x => x.id === id);
+  const last = pg.blocks.length - 1;
   openSheet(`
     <div class="sheet-head"><h2 id="sheetTitle">${def.n}</h2>
       <button class="link-btn" data-act="close" type="button">Done</button></div>
+    <p class="bo-lede">${def.d}</p>
     <form id="form" novalidate>
-      ${def.opts ? def.opts(b.cfg || {}) : ''}
-      <div class="card"><div class="row">
-        <span class="row-main"><span class="row-title">Position</span></span>
-        <button class="step-btn" data-act="blk-move" data-dir="-1" type="button" aria-label="Move up">\u2191</button>
-        <button class="step-btn" data-act="blk-move" data-dir="1" type="button" aria-label="Move down">\u2193</button>
-      </div></div>
-      ${def.opts ? '<button class="btn" type="submit">Save</button>' : ''}
-      <button class="btn is-ghost" type="button" data-act="blk-del" data-bid="${b.id}">Remove block</button>
+      ${def.opts ? `<div class="bo-sec"><h3>Settings</h3>${def.opts(b.cfg || {})}
+        <button class="btn" type="submit">Save changes</button></div>` : ''}
+
+      <div class="bo-sec"><h3>Place on the page</h3>
+        <div class="bo-pos">
+          <button class="bo-b" data-act="blk-move" data-dir="-1" data-bid="${b.id}" type="button"${i <= 0 ? ' disabled' : ''}>
+            <svg viewBox="0 0 24 24"><path d="M12 19V6M6 12l6-6 6 6"/></svg>Move up</button>
+          <button class="bo-b" data-act="blk-move" data-dir="1" data-bid="${b.id}" type="button"${i >= last ? ' disabled' : ''}>
+            <svg viewBox="0 0 24 24"><path d="M12 5v13M6 12l6 6 6-6"/></svg>Move down</button>
+        </div>
+        <p class="bo-note">${last < 1 ? 'The only block on this page.'
+          : `Block ${i + 1} of ${last + 1}. You can also drag it by the handle.`}</p>
+      </div>
+
+      <div class="bo-sec"><h3>Manage</h3>
+        <button class="bo-b is-wide" data-act="blk-dup" data-bid="${b.id}" type="button">
+          <svg viewBox="0 0 24 24"><path d="M9 9h10v10H9z"/><path d="M15 5.5H5v10"/></svg>Duplicate this block</button>
+        <button class="bo-b is-wide is-danger" data-act="blk-del" data-bid="${b.id}" type="button">
+          <svg viewBox="0 0 24 24"><path d="M6 6l12 12M18 6L6 18"/></svg>Remove from page</button>
+      </div>
     </form>`, { mode: 'blk-opts', bid: id, autofocus: false });
   tip('blkopts', '.sheet #form', { round: 16, delay: 520 });
 }
@@ -3908,32 +4072,53 @@ document.addEventListener('click', e => {
 
     case 'blk-add': openBlockPicker(); break;
 
-    case 'bp-sec': {
-      const k = el.dataset.cat;
-      pickerUI.open.has(k) ? pickerUI.open.delete(k) : pickerUI.open.add(k);
+    case 'bp-tab': {
+      if (pickerUI.tab === el.dataset.cat) break;
+      pickerUI.tab = el.dataset.cat;
+      pickerUI.prev = '';                      // a new list starts unexpanded
       paintPicker();
+      sheet.scrollTo({ top: 0, behavior: 'smooth' });   // a new list starts at its top
       break;
     }
 
-    case 'bp-jump': {
-      const k = el.dataset.cat;
-      pickerUI.open.add(k);
+    /* one preview at a time: a second tap on the open one closes it */
+    case 'bp-prev': {
+      pickerUI.prev = pickerUI.prev === el.dataset.t ? '' : el.dataset.t;
+      paintPicker();
+      if (pickerUI.prev) sheet.querySelector(`.bpc[data-t="${pickerUI.prev}"]`)
+        ?.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
+      break;
+    }
+
+    case 'bp-clear': {
       pickerUI.q = '';
       const qEl = sheet.querySelector('#bp-q');
-      if (qEl) qEl.value = '';
+      if (qEl) { qEl.value = ''; qEl.focus(); }
       paintPicker();
-      sheet.querySelector(`#sec-${k}`)?.previousElementSibling?.scrollIntoView({ block: 'start', behavior: 'smooth' });
       break;
     }
     case 'blk-opts': openBlockOpts(el.dataset.bid); break;
 
+    /* Adding keeps the organizer open so a page can be built in one pass: the
+       page behind updates immediately, the card says so, and Undo is right
+       there. Done closes and drops you on the finished page. */
     case 'blk-pick': {
       const pg = activePage();
-      pg.blocks.push({ id: bid(), t: el.dataset.t });
-      closeSheet();
+      const nb = { id: bid(), t: el.dataset.t };
+      pg.blocks.push(nb);
+      pickerUI.added = nb;
       commitLayout();
-      const added = activeSection().querySelector(`[data-bid="${pg.blocks.at(-1).id}"]`);
-      if (added) { added.scrollIntoView({ block: 'center' }); replay(added, 'anim-soft'); }
+      paintPicker();
+      sheet.querySelector(`.bpc[data-t="${nb.t}"]`)?.classList.add('is-added');
+      break;
+    }
+
+    case 'bp-undo': {
+      const pg = activePage();
+      pg.blocks = pg.blocks.filter(b => b.id !== pickerUI.added?.id);
+      pickerUI.added = null;
+      commitLayout();
+      paintPicker();
       break;
     }
 
@@ -3949,14 +4134,33 @@ document.addEventListener('click', e => {
       break;
     }
 
+    /* the arrows exist on the block itself as well as in its settings sheet */
     case 'blk-move': {
       const pg = activePage();
-      const i = pg.blocks.findIndex(b => b.id === ctx?.bid);
+      const id = el.dataset.bid || ctx?.bid;
+      const i = pg.blocks.findIndex(b => b.id === id);
       const j = i + (+el.dataset.dir);
       if (i < 0 || j < 0 || j >= pg.blocks.length) break;
       [pg.blocks[i], pg.blocks[j]] = [pg.blocks[j], pg.blocks[i]];
       saveLayout();
       render();
+      const moved = activeSection().querySelector(`.blk[data-bid="${id}"]`);
+      if (moved) { moved.scrollIntoView({ block: 'nearest' }); replay(moved, 'anim-soft'); }
+      break;
+    }
+
+    case 'blk-dup': {
+      const pg = activePage();
+      const id = el.dataset.bid || ctx?.bid;
+      const i = pg.blocks.findIndex(b => b.id === id);
+      if (i < 0) break;
+      const copy = { id: bid(), t: pg.blocks[i].t };
+      if (pg.blocks[i].cfg) copy.cfg = { ...pg.blocks[i].cfg };
+      pg.blocks.splice(i + 1, 0, copy);
+      if (ctx?.mode === 'blk-opts') closeSheet();
+      commitLayout();
+      const made = activeSection().querySelector(`.blk[data-bid="${copy.id}"]`);
+      if (made) { made.scrollIntoView({ block: 'nearest' }); replay(made, 'anim-soft'); }
       break;
     }
 

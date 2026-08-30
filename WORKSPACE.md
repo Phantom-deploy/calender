@@ -360,16 +360,53 @@ per-class homework pace, on-time rates, finish-days and focus days for the
 estimate/meter/streak/completion blocks. Per-device preferences live in
 `planner.prefs.v1` (theme incl. auto, week start, 12/24 h, default due,
 sleep target, compact, motion, confirms, do-tonight reveal) behind the gear
-button, which replaced the theme toggle. The block picker is sectioned by
-category (collapsible, lazy previews) with search; the page-icon sheet offers
-the mono glyph set, an emoji grid, and a type-your-own field.
+button, which replaced the theme toggle. The page-icon sheet offers the mono
+glyph set, an emoji grid, and a type-your-own field.
 
-The pencil in the top bar toggles edit mode: blocks gain a chrome bar (drag
-handle, name → options sheet, remove), block bodies go inert, an Add-block
-picker shows live scaled previews, and a Pages sheet manages rename / icon
-(svg key or emoji) / drag order / add (from `PAGE_TMPLS`) / delete. Dragging
-uses one pointer-based engine with FLIP transforms for both blocks and page
-rows.
+## The block organizer
+
+Rebuilt around one idea: the tab strip is the only navigation, so the list you
+are reading is the only list on screen. The old picker had two navigations for
+the same thing — category chips that merely opened and scrolled to an
+accordion section — and a card per block whose live preview made every row a
+different height. Now `All` shows every family under its own heading, and a
+family tab shows just that family with **no** heading, because the selected
+tab already names it and carries its count. Search cuts across everything,
+takes the view over, and hides the tabs while it holds a query; a miss gets a
+real empty state with a way out rather than a bare line of text.
+
+Search and tabs ride in a sticky `.bp-bar` together with the sheet head, so
+Done never scrolls away from the list it closes. Previews are real renders of
+your own data at natural size (no scaling), inert, and open **one at a time** —
+sixty-odd live blocks rendering at once is what made the old picker heavy.
+Adding keeps the organizer open so a page can be built in one pass: the page
+behind updates immediately, the card says it landed, Undo sits beside it, and
+cards already on the page say so.
+
+Edit mode gives every block the same five controls in the same order — up,
+down, duplicate, settings, remove — with the ends disabled at the ends of the
+page. A block's own top heading is suppressed there, since the bar above
+already names it; only the first one goes, so a block with several sections
+keeps the headings that tell those sections apart. `blk-move` and `blk-dup`
+read `data-bid` as well as the sheet's `ctx.bid`, so the same actions work
+from the block and from its settings sheet. Dragging uses one pointer-based
+engine with FLIP transforms for both blocks and page rows.
+
+## Dated lists
+
+A day is stated once, as its own heading, with everything falling on it
+grouped underneath (`dayGroupsHTML`). Rows inside a group are rendered with
+`hideDate`, so a day with four things on it reads as one day rather than four
+rows each repeating the same date. The heading carries the date chip, the
+weekday, a relative label when it says something the weekday doesn't, and a
+count. Today is the only day given colour; overdue days take the danger tint.
+A panel holding groups gets `is-grouped` and stops painting its own card —
+the groups bring their own surfaces, and a card inside a card is the nesting
+that reads as clutter. In Full notebook those surfaces dissolve entirely and
+a dashed rule under each day heading does the separating.
+
+Note for future edits: the selected-day section is `.dsel`, **not** `.day` —
+`.day` is already the calendar grid's date cell, and the two collide.
 
 `guessClass()` is the context layer's first use: Add homework / note pre-picks
 the class you're in, the one you just left during passing/lunch/break, or the

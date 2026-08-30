@@ -1556,6 +1556,7 @@ main {
 
 .blk-name {
   flex: 1;
+  min-width: 0;
   text-align: left;
   font-size: 12.5px;
   font-weight: 650;
@@ -1563,10 +1564,44 @@ main {
   text-transform: uppercase;
   color: var(--muted);
   padding: 8px 4px;
-  border-radius: 8px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
-.blk-name:active { color: var(--accent); }
+/* every block carries the same row of controls, in the same order */
+.blk-acts { display: flex; align-items: center; gap: 1px; flex: none; }
+
+.blk-a {
+  width: 32px;
+  height: 32px;
+  display: grid;
+  place-items: center;
+  color: var(--muted);
+  border-radius: 9px;
+  transition: color .18s ease, background-color .18s ease;
+}
+
+.blk-a svg { width: 16px; height: 16px; fill: none; stroke: currentColor; stroke-width: 2;
+  stroke-linecap: round; stroke-linejoin: round; }
+
+.blk-a:active { color: var(--accent); background: var(--surface-2); }
+.blk-a.is-del:active { color: var(--danger); }
+.blk-a[disabled] { opacity: .28; }
+
+@media (hover: hover) and (pointer: fine) {
+  .blk-a:hover { color: var(--text); background: var(--surface-2); }
+  .blk-a.is-del:hover { color: var(--danger); }
+  .blk-a[disabled]:hover { color: var(--muted); background: none; }
+}
+
+/* The bar above already names the block, so its own top heading is the same
+   words twice. Only the first one goes — a block with several sections keeps
+   the headings that tell those sections apart. */
+.blk-body > .panel:first-child > .panel-head:first-child,
+.blk-body > .card:first-child > .section-head:first-child,
+.blk-body > .section-head:first-child,
+.blk-body > .panel-head:first-child { display: none; }
 
 .blk-x {
   width: 34px;
@@ -1617,57 +1652,6 @@ main {
 .add-blk:active { background: var(--accent-soft); transform: scale(.985); }
 .blk-spacer { height: 26px; }
 
-/* ---------- v2: block picker ---------- */
-.bp-list { display: grid; gap: 10px; }
-
-.bp {
-  display: flex;
-  align-items: stretch;
-  gap: 10px;
-  width: 100%;
-  padding: 12px;
-  border-radius: var(--r-card);
-  background: var(--surface-2);
-  text-align: left;
-  transition: transform .18s var(--ease);
-}
-
-.bp:active { transform: scale(.98); }
-
-.bp-info {
-  flex: 1;
-  min-width: 0;
-  display: flex;
-  flex-direction: column;
-  justify-content: center;
-  gap: 3px;
-}
-
-.bp-info b { font-size: 15px; font-weight: 650; letter-spacing: -0.01em; }
-.bp-info i { font-style: normal; font-size: 12.5px; color: var(--muted); line-height: 1.4; }
-
-/* a real render of the block, scaled down and made inert */
-.bp-prev {
-  flex: none;
-  width: 128px;
-  height: 74px;
-  border-radius: 12px;
-  background: var(--bg);
-  overflow: hidden;
-  pointer-events: none;
-  position: relative;
-}
-
-.bp-scale {
-  position: absolute;
-  top: 4px;
-  left: 4px;
-  width: 300px;
-  transform: scale(.4);
-  transform-origin: top left;
-}
-
-.bp-scale * { animation: none !important; }
 
 /* ---------- v2: pages sheet ---------- */
 .pg-list { display: grid; gap: 6px; margin-bottom: 12px; }
@@ -1912,52 +1896,269 @@ body.no-motion *, body.no-motion *::before, body.no-motion *::after {
   transition-duration: .01ms !important;
 }
 
-/* ---------- v2.1: block picker ---------- */
+/* ══════════ the block organizer ══════════
+   Search and the tab strip ride together at the top of the sheet, so the
+   navigation never scrolls away from the list it controls. Below them the
+   view shows exactly one thing: a family of blocks, or search results. */
+.bp-bar {
+  position: sticky;
+  top: -8px;                       /* the sheet's own top padding */
+  z-index: 4;
+  margin: 0 -2px;
+  padding: 2px 2px 0;
+  background: var(--surface);
+}
+
+.bp-bar .sheet-head { margin-bottom: 10px; }
 .bp-search { margin-bottom: 8px; }
 
-.bp-chips {
+/* the bar is fixed above the list, so anything scrolled to must clear it */
+.bpc { scroll-margin-top: 132px; }
+.bp-group { scroll-margin-top: 132px; }
+
+.bp-tabs {
   display: flex;
-  gap: 6px;
+  gap: 2px;
   overflow-x: auto;
-  padding-bottom: 10px;
+  padding-bottom: 2px;
+  border-bottom: 1px solid var(--line);
   -webkit-overflow-scrolling: touch;
   scrollbar-width: none;
 }
 
-.bp-chips::-webkit-scrollbar { display: none; }
-.bp-chips .chip { flex: none; min-height: 34px; padding: 0 13px; font-size: 13px; }
+.bp-tabs::-webkit-scrollbar { display: none; }
 
-.bp-sec {
-  display: flex;
+/* a soft edge says there are more tabs than fit */
+.bp-tabs {
+  -webkit-mask: linear-gradient(to right, #000 calc(100% - 28px), transparent);
+  mask: linear-gradient(to right, #000 calc(100% - 28px), transparent);
+}
+.bp-tabs[hidden] { display: none; }
+
+.bp-tab {
+  flex: none;
+  display: inline-flex;
   align-items: center;
+  gap: 6px;
+  padding: 9px 12px 11px;
+  border-bottom: 2px solid transparent;
+  font-size: 13.5px;
+  font-weight: 600;
+  color: var(--muted);
+  white-space: nowrap;
+  transition: color .18s ease, border-color .18s ease;
+}
+
+.bp-tab i {
+  font-style: normal;
+  font-size: 11px;
+  font-weight: 650;
+  padding: 1px 6px;
+  border-radius: 99px;
+  background: var(--surface-2);
+  color: var(--muted);
+}
+
+.bp-tab.is-on { color: var(--accent); border-bottom-color: var(--accent); }
+.bp-tab.is-on i { background: var(--accent-soft); color: var(--accent); }
+
+/* ---------- a family of blocks ---------- */
+.bp-group + .bp-group { margin-top: 22px; }
+
+/* a single-family view needs no heading, so its list starts at the top */
+.bp-group:only-child > .bp-list:first-child { padding-top: 14px; }
+
+.bp-gh {
+  display: flex;
+  align-items: baseline;
   gap: 8px;
-  width: 100%;
-  padding: 13px 6px;
-  border-top: 1px solid var(--line);
-  font-size: 13px;
+  padding: 16px 2px 10px;
+}
+
+.bp-gh h3 {
+  font-size: 12px;
   font-weight: 700;
-  letter-spacing: .05em;
+  letter-spacing: .07em;
   text-transform: uppercase;
   color: var(--muted);
-  text-align: left;
 }
 
-.bp-sec span { flex: 1; }
-.bp-sec i { font-style: normal; font-weight: 600; opacity: .6; }
-.bp-sec .chev { transition: transform .22s var(--ease); }
-.bp-sec.is-open .chev { transform: rotate(90deg); }
-.bp-sec.is-open { color: var(--accent); }
+.bp-gh span { font-size: 12px; font-weight: 600; color: var(--muted); opacity: .6; }
 
-.bp-info em {
-  font-style: normal;
-  font-size: 11.5px;
+.bp-list { display: grid; gap: 10px; }
+
+.bp-count { padding: 14px 2px 10px; font-size: 13px; color: var(--muted); }
+
+/* ---------- one block, as a card you can read ---------- */
+.bpc {
+  padding: 13px 14px 11px;
+  border: 1px solid var(--line);
+  border-radius: var(--r-card);
+  background: var(--surface);
+  transition: border-color .2s ease, box-shadow .2s ease;
+}
+
+.bpc.is-open { border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-soft); }
+
+.bpc-top { display: flex; align-items: flex-start; gap: 11px; }
+
+.bpc-ico {
+  flex: none;
+  width: 34px;
+  height: 34px;
+  display: grid;
+  place-items: center;
+  border-radius: 10px;
+  background: var(--surface-2);
+  color: var(--muted);
+}
+
+.bpc-ico svg { width: 18px; height: 18px; fill: none; stroke: currentColor; stroke-width: 1.8;
+  stroke-linecap: round; stroke-linejoin: round; }
+
+.bpc-txt { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 2px; }
+.bpc-txt b { font-size: 15px; font-weight: 650; letter-spacing: -0.01em; }
+.bpc-txt i { font-style: normal; font-size: 12.5px; color: var(--muted); line-height: 1.4; }
+
+.bpc-add {
+  flex: none;
+  min-height: 32px;
+  padding: 0 15px;
+  border-radius: 99px;
+  background: var(--accent);
+  color: #fff;
+  font-size: 13.5px;
+  font-weight: 650;
+  transition: transform .16s var(--ease), opacity .16s ease;
+}
+
+.bpc-add:active { transform: scale(.94); }
+
+.bpc-done {
+  flex: none;
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  min-height: 32px;
+  padding: 0 12px;
+  border-radius: 99px;
+  background: var(--accent-soft);
   color: var(--accent);
-  line-height: 1.35;
-  opacity: .85;
+  font-size: 13px;
+  font-weight: 650;
 }
 
-.bp-list { padding-bottom: 10px; }
-.bp-list .bp + .bp { margin-top: 10px; }
+.bpc-done svg { width: 14px; height: 14px; fill: none; stroke: currentColor; stroke-width: 2.6;
+  stroke-linecap: round; stroke-linejoin: round; }
+
+/* the one-line "what makes this block smart" note */
+.bpc-sm {
+  margin: 9px 0 0;
+  padding-left: 45px;
+  font-size: 12px;
+  line-height: 1.45;
+  color: var(--muted);
+}
+
+.bpc-foot {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-top: 7px;
+  padding-left: 45px;
+}
+
+.bpc-pv {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  padding: 5px 0;
+  font-size: 12.5px;
+  font-weight: 600;
+  color: var(--accent);
+}
+
+.bpc-pv .chev { width: 15px; height: 15px; transition: transform .22s var(--ease); }
+.bpc.is-open .bpc-pv .chev { transform: rotate(90deg); }
+
+.bpc-on {
+  margin-left: auto;
+  font-size: 11.5px;
+  font-weight: 600;
+  color: var(--muted);
+  opacity: .8;
+}
+
+.bpc-undo { margin-left: auto; font-size: 12.5px; font-weight: 600; color: var(--muted); padding: 5px 0; }
+
+/* a real render of the block, inert, on the app's own background */
+.bpc-prev {
+  margin-top: 11px;
+  padding: 10px;
+  border-radius: 12px;
+  background: var(--bg);
+  pointer-events: none;
+  overflow: hidden;
+  animation: softIn .24s var(--ease) both;
+}
+
+.bpc-frame > * { margin-top: 0 !important; }
+.bpc-prev * { animation: none !important; }
+
+.bp-none {
+  display: grid;
+  gap: 8px;
+  justify-items: center;
+  text-align: center;
+  padding: 40px 20px;
+  color: var(--muted);
+}
+
+.bp-none b { font-size: 15px; color: var(--text); }
+.bp-none span { font-size: 13px; line-height: 1.5; max-width: 30ch; }
+.bp-none .btn { margin-top: 6px; width: auto; padding: 0 20px; }
+
+/* ---------- block settings sheet ---------- */
+.bo-lede { margin: -2px 0 14px; font-size: 13.5px; line-height: 1.5; color: var(--muted); }
+
+.bo-sec + .bo-sec { margin-top: 20px; }
+
+.bo-sec h3 {
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: .07em;
+  text-transform: uppercase;
+  color: var(--muted);
+  margin-bottom: 10px;
+}
+
+.bo-pos { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+
+.bo-b {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 7px;
+  min-height: 44px;
+  padding: 0 14px;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: var(--surface-2);
+  font-size: 14px;
+  font-weight: 600;
+  transition: background-color .18s ease, transform .16s var(--ease);
+}
+
+.bo-b svg { width: 17px; height: 17px; fill: none; stroke: currentColor; stroke-width: 1.9;
+  stroke-linecap: round; stroke-linejoin: round; }
+
+.bo-b:active { transform: scale(.98); }
+.bo-b[disabled] { opacity: .38; }
+.bo-b.is-wide { width: 100%; justify-content: flex-start; }
+.bo-b.is-wide + .bo-b.is-wide { margin-top: 8px; }
+.bo-b.is-danger { color: var(--danger); }
+
+.bo-note { margin-top: 9px; font-size: 12px; color: var(--muted); }
 
 /* ---------- v2.1: block visuals ---------- */
 .blk-btn { margin-top: 14px; }
@@ -2175,7 +2376,7 @@ body.no-motion *, body.no-motion *::before, body.no-motion *::after {
 .set-seg::-webkit-scrollbar { display: none; }
 
 /* previews: buttons shouldn't drag their page margins into the little pane */
-.bp-scale > * { margin-top: 0 !important; }
+.bpc-frame > * { margin-top: 0 !important; }
 
 /* ---------- Spotlight (first-use guide) ----------
    The dim is one enormous box-shadow around a transparent hole, so there is
@@ -3058,6 +3259,9 @@ body.no-motion *, body.no-motion *::before, body.no-motion *::after {
 [data-style="notebook"][data-full="1"] .mood,
 [data-style="notebook"][data-full="1"] .rev,
 [data-style="notebook"][data-full="1"] .srch,
+[data-style="notebook"][data-full="1"] .dg-list,
+[data-style="notebook"][data-full="1"] .dsel-list,
+[data-style="notebook"][data-full="1"] .dsel-empty,
 [data-style="notebook"][data-full="1"] .cap {
   background: none;
   box-shadow: none;
@@ -3110,7 +3314,7 @@ body.no-motion *, body.no-motion *::before, body.no-motion *::after {
 /* the calendar grid reads as ruled squares, like the reference */
 [data-style="notebook"][data-full="1"] .cal-grid { gap: 0; }
 
-[data-style="notebook"][data-full="1"] .day {
+[data-style="notebook"][data-full="1"] .dsel {
   min-height: calc(var(--nb-rule-h) * 3);
   border-radius: 0;
 }
@@ -3165,3 +3369,202 @@ body.no-motion *, body.no-motion *::before, body.no-motion *::after {
 }
 
 [data-style="notebook"][data-full="1"] .row.task { border-radius: 6px; }
+
+/* ══════════ dated lists: a day is a section ══════════
+   The date is stated once, in the heading, and everything that falls on it
+   sits underneath. Rows inside a group drop their own date label, so a day
+   with four things on it reads as one day rather than four repetitions. */
+.dg + .dg { margin-top: 14px; }
+
+/* the groups bring their own surfaces, so the panel around them must not be
+   a second card — a card inside a card is the nesting that reads as clutter */
+.panel.is-grouped {
+  background: none;
+  box-shadow: none;
+  border-radius: 0;
+  overflow: visible;
+}
+
+.panel.is-grouped > .panel-head { padding-left: 4px; padding-right: 4px; }
+
+.dg-h {
+  display: flex;
+  align-items: center;
+  gap: 11px;
+  padding: 0 4px 8px;
+}
+
+.dg-date {
+  flex: none;
+  width: 42px;
+  display: grid;
+  justify-items: center;
+  gap: 1px;
+  padding: 5px 0 6px;
+  border-radius: 10px;
+  background: var(--surface-2);
+  line-height: 1;
+}
+
+.dg-date b { font-size: 17px; font-weight: 700; letter-spacing: -.02em; }
+
+.dg-date i {
+  font-style: normal;
+  font-size: 10px;
+  font-weight: 650;
+  letter-spacing: .06em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+
+.dg-when { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 1px; }
+.dg-when b { font-size: 14px; font-weight: 650; letter-spacing: -.01em; }
+.dg-when i { font-style: normal; font-size: 12px; color: var(--muted); }
+
+.dg-n {
+  flex: none;
+  min-width: 22px;
+  padding: 2px 7px;
+  border-radius: 99px;
+  background: var(--surface-2);
+  font-size: 11.5px;
+  font-weight: 650;
+  color: var(--muted);
+  text-align: center;
+}
+
+.dg-list {
+  border-radius: var(--r-card);
+  background: var(--surface);
+  overflow: hidden;
+}
+
+/* today is the one day that gets colour */
+.dg.is-today .dg-date { background: var(--accent); color: #fff; }
+.dg.is-today .dg-date i { color: rgba(255, 255, 255, .82); }
+.dg.is-today .dg-when b { color: var(--accent); }
+
+.dg.is-past .dg-date { background: color-mix(in srgb, var(--danger) 14%, transparent); }
+.dg.is-past .dg-date i,
+.dg.is-past .dg-when i { color: var(--danger); }
+
+/* ---------- the selected day, at the top of the agenda ---------- */
+.dsel { margin-top: 4px; }
+
+.dsel-h {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 2px 4px 12px;
+}
+
+.dsel-date {
+  flex: none;
+  width: 50px;
+  display: grid;
+  justify-items: center;
+  gap: 1px;
+  padding: 7px 0 8px;
+  border-radius: 13px;
+  background: var(--accent);
+  color: #fff;
+  line-height: 1;
+}
+
+.dsel-date b { font-size: 22px; font-weight: 700; letter-spacing: -.03em; }
+
+.dsel-date i {
+  font-style: normal;
+  font-size: 10.5px;
+  font-weight: 650;
+  letter-spacing: .06em;
+  text-transform: uppercase;
+  color: rgba(255, 255, 255, .85);
+}
+
+.dsel-when { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 2px; }
+.dsel-when b { font-size: 19px; font-weight: 700; letter-spacing: -.02em; }
+.dsel-when i { font-style: normal; font-size: 12.5px; color: var(--muted); }
+
+.dsel-add {
+  flex: none;
+  width: 38px;
+  height: 38px;
+  display: grid;
+  place-items: center;
+  border-radius: 12px;
+  background: var(--accent-soft);
+  color: var(--accent);
+  transition: transform .16s var(--ease);
+}
+
+.dsel-add:active { transform: scale(.93); }
+.dsel-add svg { width: 19px; height: 19px; }
+
+.dsel-list {
+  border-radius: var(--r-card);
+  background: var(--surface);
+  overflow: hidden;
+}
+
+.dsel-empty {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 6px;
+  padding: 18px 16px;
+  border-radius: var(--r-card);
+  background: var(--surface);
+  font-size: 14px;
+  color: var(--muted);
+}
+
+.panel.is-late-sec .panel-head h2 { color: var(--danger); }
+
+
+/* ---------- the organizer and dated lists, on paper ---------- */
+[data-style="notebook"] .bpc {
+  border-radius: 12px 14px 12px 15px / 14px 12px 15px 12px;
+  background: none;
+}
+
+[data-style="notebook"] .bpc-ico {
+  border-radius: 10px 12px 10px 13px / 12px 10px 13px 10px;
+}
+
+/* the date chip reads as something written in the margin */
+[data-style="notebook"] .dg-date,
+[data-style="notebook"] .dsel-date {
+  border-radius: 11px 13px 11px 14px / 13px 11px 14px 11px;
+}
+
+[data-style="notebook"] .bp-tab.is-on { border-bottom-width: 2.5px; }
+
+/* on one continuous sheet a day is separated by its heading and the ruled
+   line under it, not by a panel edge */
+[data-style="notebook"][data-full="1"] .dg-h,
+[data-style="notebook"][data-full="1"] .dsel-h {
+  padding-left: 0;
+  padding-right: 4px;
+  border-bottom: 1px dashed var(--line);
+  margin-bottom: 6px;
+}
+
+[data-style="notebook"][data-full="1"] .dg + .dg { margin-top: 20px; }
+
+/* an untouched page explains what a block is before asking for one */
+.pg-blank {
+  display: grid;
+  gap: 7px;
+  justify-items: center;
+  text-align: center;
+  padding: 34px 22px 30px;
+  border-radius: var(--r-card);
+  background: var(--surface);
+  color: var(--muted);
+}
+
+.pg-blank b { font-size: 15.5px; font-weight: 650; color: var(--text); }
+.pg-blank span { font-size: 13px; line-height: 1.55; max-width: 34ch; }
+
+[data-style="notebook"][data-full="1"] .pg-blank { background: none; padding-left: 0; padding-right: 0; }
