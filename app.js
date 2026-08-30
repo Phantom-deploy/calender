@@ -4583,6 +4583,19 @@ try {
     savePrefs();
   }
 } catch {}
+
+/* one-time rollout: every device lands on Light + Notebook once, even one
+   that saved different prefs before those became the defaults. Runs once
+   per device (flagged, like the news banner) so a later change of your own
+   sticks afterward. */
+try {
+  if (!localStorage.getItem('planner.lightNotebook')) {
+    prefs.theme = 'light';
+    prefs.style = 'notebook';
+    savePrefs();
+    localStorage.setItem('planner.lightNotebook', '1');
+  }
+} catch {}
 applyPrefs();
 $('#gearBtn').addEventListener('click', openSettings);
 
