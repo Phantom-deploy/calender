@@ -252,6 +252,13 @@ in a new Durable Object:
 cd sync && npx wrangler deploy
 ```
 
+## Guided first use
+
+The first time you open edit mode, the block picker, the pages sheet, the icon
+sheet or settings, the page dims around it and a card explains what it is.
+Each one appears once and never again; tap anywhere to dismiss. They are
+skipped during setup and during a focus session.
+
 ## Data
 
 Data lives in this browser profile under the `planner.v1` key (sync settings sit
