@@ -3224,6 +3224,55 @@ const NEWS = [
   }
 ];
 
+/* Where the update banner used to sit. It asks for the one thing a free,
+   ad-free, one-person app can actually use: another person. */
+const FEEDBACK_URL = 'https://forms.gle/jKYpCFT2xLuBDMie8';
+
+function shareURL() {
+  try { return new URL('.', location.href).href; } catch { return location.href; }
+}
+
+function openShare() {
+  openSheet(`
+    <div class="news">
+      <div class="news-screen">
+        <span class="news-icon">${NEWS_ICONS.heart}</span>
+        <p class="news-eyebrow">Thank you</p>
+        <h2 class="news-title" id="sheetTitle">Share it with a friend</h2>
+        <p class="news-body">Thank you so much for using Planner. I\u2019m a solo
+          developer, and I promise to keep this free and completely ad-free.</p>
+        <p class="news-body">If you\u2019ve enjoyed it, please consider sharing it with a
+          friend so they can use it too. Your support means a lot, and it keeps
+          me building and improving the app.</p>
+      </div>
+      <div class="news-foot is-share">
+        <button class="btn" type="button" data-act="share-do" id="shareBtn">Share Planner</button>
+        <button class="link-btn" type="button" data-act="close">Maybe later</button>
+      </div>
+    </div>`, { mode: 'share', autofocus: false });
+}
+
+/* The share sheet, then the clipboard, then simply showing the link \u2014 a
+   device that has neither still ends up with something it can pass on. */
+async function doShare(btn) {
+  const url = shareURL();
+  const payload = {
+    title: 'Planner',
+    text: 'Planner \u2014 a free, ad-free school planner. Worth a look:',
+    url
+  };
+  if (navigator.share) {
+    try { await navigator.share(payload); return; }
+    catch (e) { if (e && e.name === 'AbortError') return; }   // they changed their mind
+  }
+  try {
+    await navigator.clipboard.writeText(url);
+    if (btn) { btn.textContent = 'Link copied \u2014 paste it to a friend'; btn.disabled = true; }
+    return;
+  } catch {}
+  if (btn) { btn.textContent = url; btn.disabled = true; }
+}
+
 /* A read that throws (private mode, storage off) counts as seen: better to
    stay quiet than to reopen the same announcement on every launch. */
 function newsSeen() {
@@ -3457,6 +3506,17 @@ function openSettings() {
       <button class="row" data-act="erase"><span class="row-main">
         <span class="row-title" style="color:var(--danger)">Erase this device</span>
         <span class="row-sub">Everything local. Synced copies survive.</span></span>${CHEV}</button>
+    </div>
+
+    <div class="section-head"><h2>Feedback</h2></div>
+    <div class="card">
+      <a class="row" href="${FEEDBACK_URL}" target="_blank" rel="noopener noreferrer">
+        <span class="row-main"><span class="row-title">Send feedback</span>
+          <span class="row-sub">A bug, or a feature you\u2019d like</span>
+        </span>${CHEV}</a>
+      <button class="row" data-act="share-open" type="button"><span class="row-main">
+        <span class="row-title">Share with a friend</span>
+        <span class="row-sub">Free and ad-free, and staying that way</span></span>${CHEV}</button>
     </div>
 
     <p class="hint set-about">Planner \u00b7 the massive update, live.
@@ -4412,6 +4472,8 @@ document.addEventListener('click', e => {
       break;
 
     case 'news': openNews(0); break;
+    case 'share-open': openShare(); break;
+    case 'share-do': doShare(el); break;
     case 'news-back': newsGo(-1); break;
     case 'news-dot': {
       const to = +el.dataset.i;

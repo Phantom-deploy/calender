@@ -3568,3 +3568,134 @@ body.no-motion *, body.no-motion *::before, body.no-motion *::after {
 .pg-blank span { font-size: 13px; line-height: 1.55; max-width: 34ch; }
 
 [data-style="notebook"][data-full="1"] .pg-blank { background: none; padding-left: 0; padding-right: 0; }
+
+/* ══════════ share banner ══════════
+   Sits where the update banner used to, between the top bar and the page.
+   Stacked on a phone and one line from 430px up: both strings stay whole at a
+   readable size either way, since fitting them on one line at 360px would
+   mean 9.5px type. */
+.banner-wrap {
+  max-width: 620px;
+  margin: 0 auto;
+  padding: 8px calc(var(--pad) + var(--safe-right)) 0 calc(var(--pad) + var(--safe-left));
+}
+
+.share-banner {
+  position: relative;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 1px;
+  width: 100%;
+  padding: 7px 14px;
+  border-radius: 18px;
+  background: var(--accent-soft);
+  color: var(--accent);
+  transition: transform .18s var(--ease), background-color .18s ease;
+}
+
+.share-banner:active { transform: scale(.985); }
+.share-banner > * { position: relative; z-index: 1; }
+
+.sb-line { display: flex; align-items: center; gap: 7px; max-width: 100%; }
+
+.sb-dot {
+  flex: none;
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: currentColor;
+  animation: breathe 1.9s ease-in-out infinite;
+}
+
+.sb-title {
+  min-width: 0;
+  font-size: 11.5px;
+  font-weight: 750;
+  letter-spacing: .045em;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.sb-cta {
+  flex: none;
+  display: flex;
+  align-items: center;
+  gap: 1px;
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: .045em;
+  white-space: nowrap;
+  opacity: .72;
+}
+
+.sb-chev { flex: none; width: 12px; height: 12px; stroke-width: 2.8; }
+
+@media (min-width: 430px) {
+  .share-banner {
+    flex-direction: row;
+    justify-content: center;
+    gap: 8px;
+    min-height: 37px;
+    padding: 8px 14px;
+    border-radius: 999px;
+  }
+
+  /* a middot ties the two halves into one sentence on the wider layout */
+  .sb-cta::before { content: "·"; margin-right: 8px; opacity: .75; }
+}
+
+/* a slow sweep of light, so the strip reads as alive without shouting */
+.share-banner::after {
+  content: "";
+  position: absolute;
+  z-index: 0;
+  top: 0;
+  bottom: 0;
+  left: -45%;
+  width: 45%;
+  background: linear-gradient(90deg, transparent,
+    color-mix(in srgb, var(--accent) 15%, transparent), transparent);
+  animation: sbSweep 4.2s ease-in-out infinite;
+}
+
+@keyframes sbSweep {
+  0%, 18% { transform: translateX(0); }
+  72%, 100% { transform: translateX(330%); }
+}
+
+/* the share sheet's own footer: the action, then the way out */
+.news-foot.is-share {
+  flex-direction: column;
+  align-items: stretch;
+  gap: 4px;
+}
+
+.news-foot.is-share .btn { width: 100%; }
+.news-foot.is-share .link-btn { align-self: center; padding: 8px; }
+
+/* on paper the strip is a taped-on note, not a pill */
+[data-style="notebook"] .share-banner {
+  border-radius: 11px 13px 11px 14px / 13px 11px 14px 11px;
+  background: color-mix(in srgb, var(--accent) 11%, transparent);
+  box-shadow: inset 0 0 0 1.5px color-mix(in srgb, var(--accent) 26%, transparent);
+}
+
+@media (min-width: 430px) {
+  [data-style="notebook"] .share-banner {
+    border-radius: 999px 999px 998px 999px / 999px 998px 999px 999px;
+  }
+}
+
+/* full notebook: the banner rides the desk above the sheet, so it keeps the
+   page's own width instead of running the whole window */
+[data-style="notebook"][data-full="1"] .banner-wrap {
+  width: var(--nb-page);
+  max-width: 100%;
+}
+
+/* a row that happens to be a link still reads as a row, not as body-text HTML */
+a.row { color: inherit; text-decoration: none; }
+a.row .row-title { color: var(--text); }

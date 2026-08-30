@@ -363,6 +363,28 @@ sleep target, compact, motion, confirms, do-tonight reveal) behind the gear
 button, which replaced the theme toggle. The page-icon sheet offers the mono
 glyph set, an emoji grid, and a type-your-own field.
 
+## Share banner and feedback
+
+A strip between the top bar and the page, in the slot the retired
+"MASSIVE UPDATE COMING SOON" banner used: **SHARE WITH A FRIEND ·
+FREE, AD-FREE, ALWAYS**. It stacks on a phone and becomes one pill from 430px
+up, since fitting both strings on one line at 360px would mean 9.5px type. On
+paper it is a taped-on note rather than a pill, and in Full notebook the wrap
+takes `--nb-page` so it keeps the sheet's width instead of the window's.
+
+Tapping it opens a single-screen note reusing the `.news` deck's own markup:
+the thanks, the promise that Planner stays free and ad-free, and the ask.
+`doShare()` tries `navigator.share` first, treats an `AbortError` as "changed
+their mind" rather than a failure, falls back to copying the link to the
+clipboard, and finally just shows the URL — a device with neither API still
+ends up with something it can pass on.
+
+Settings gained a **Feedback** section: `Send feedback` is an `<a>` to
+`FEEDBACK_URL` (a Google Form) with `target="_blank" rel="noopener noreferrer"`,
+plus a row that reopens the share note. `a.row` resets colour and
+`text-decoration`, because an unstyled anchor in a card reads as raw link text
+next to every other row.
+
 ## The block organizer
 
 Rebuilt around one idea: the tab strip is the only navigation, so the list you
