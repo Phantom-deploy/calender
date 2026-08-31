@@ -434,10 +434,45 @@ Note for future edits: the selected-day section is `.dsel`, **not** `.day` —
 the class you're in, the one you just left during passing/lunch/break, or the
 last one you had today — always visible in the dropdown, never silent.
 
-First run only (no data, no layout): a four-screen setup — welcome, classes
-explainer, platform-aware Add-to-Home-Screen, then Template (pick 4 of 5, an
-Empty page always added) or Scratch (Home only, edit mode open). Existing
-users never see it. Flag: `planner.onboard`.
+## First run
+
+First run only (no data, no layout). The principle is **start, experience,
+customise** — nothing is asked for that the app cannot start without, and
+nothing is taught before it has been used.
+
+Three screens — welcome, school, style — then the home-screen guide. There is
+no classes step (that used to demand data before the product had shown
+anything) and no template-or-blank fork: everyone lands on the same built
+planner, `defaultPages()`, with the Focus page as the empty one to build on.
+`Skip` finishes from any screen and still builds the same thing.
+
+The home-screen guide is one drawn step at a time, walked by `su.a2`: an SVG of
+the actual control with an accent ring around the exact thing to press, a
+numbered line of at most a few words, progress dots, and one prominent button.
+`A2HS_STEPS` keys off `suPlatform()` — three steps on iOS, two on Android, one
+on desktop, and a single confirmation when already installed.
+
+Then `startTour()` runs five spotlights through the planner they now have, in
+the order you would actually meet it: the schedule that drives everything, the
+countdown it produces, one real task to finish, then how to rearrange and
+configure what they just used. `seedSample()` plants that task — **Visit
+Planner**, due today, `SAMPLE_ID`.
+
+Two pieces of the spotlight system exist for this. A step can carry `after`,
+which `closeTip()` runs instead of pulling the next queued tip, so the chain
+survives a dismissal *and* a missing target (`runTip` hands on rather than
+stopping halfway). And a step can carry `through`: the overlay swallows every
+click, so a step that asks you to press the thing it is pointing at passes that
+one press through the hole and dismisses anywhere else. Nothing is compulsory.
+
+`holdRow` is why the cross-off is visible. Home's lists drop finished work, so
+without it the sample task vanishes the instant it is checked. The Tasks page
+already held its rows still for the same reason; the tour borrows that, then
+`tourEdit`'s render restores consistency. The tour marks `pencil`, `gear`,
+`school` and `edit` seen, since it covers all four properly — otherwise
+Settings would open onto two spotlights stacked in the wrong order.
+
+Existing users never see any of it. Flag: `planner.onboard`.
 
 ## Visit counter
 

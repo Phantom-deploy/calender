@@ -1759,82 +1759,87 @@ main {
 
 .su p { margin: 0 0 10px; font-size: 16px; line-height: 1.6; color: var(--muted); }
 
-.su-steps { display: grid; gap: 12px; margin: 18px 0 0; }
+/* ---------- home-screen instructions: one drawn step at a time ---------- */
+.su-a2 .su-sub { margin-bottom: 18px; }
 
-.su-step {
-  display: flex;
-  gap: 12px;
-  align-items: flex-start;
-  padding: 14px 15px;
+.a2-card {
   border-radius: var(--r-card);
   background: var(--surface);
   box-shadow: var(--shadow-card);
-  font-size: 14.5px;
-  line-height: 1.5;
+  overflow: hidden;
 }
 
-.su-step b { display: block; font-size: 15px; margin-bottom: 2px; }
-.su-step svg { flex: none; width: 22px; height: 22px; margin-top: 2px; color: var(--accent); }
-
-.su-foot { display: flex; gap: 10px; align-items: center; }
-.su-foot .btn { flex: 1; }
-
-/* the template-or-scratch fork */
-.su-fork { display: grid; gap: 12px; }
-
-.su-card {
-  text-align: left;
-  padding: 18px 17px;
-  border-radius: var(--r-card);
-  background: var(--surface);
-  box-shadow: var(--shadow-card);
-  transition: transform .18s var(--ease);
-}
-
-.su-card:active { transform: scale(.98); }
-.su-card b { display: block; font-size: 17px; font-weight: 700; letter-spacing: -0.015em; }
-.su-card span { display: block; margin-top: 4px; font-size: 14px; color: var(--muted); line-height: 1.5; }
-
-/* the 5-pick-4 grid */
-.su-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin: 16px 0; }
-
-.su-tile {
-  position: relative;
-  display: flex;
-  flex-direction: column;
-  align-items: flex-start;
-  gap: 8px;
-  padding: 14px;
-  border-radius: var(--r-card);
-  background: var(--surface);
-  box-shadow: inset 0 0 0 1.5px var(--line);
-  text-align: left;
-  transition: box-shadow .18s ease, transform .18s var(--ease);
-}
-
-.su-tile:active { transform: scale(.97); }
-.su-tile.is-on { box-shadow: inset 0 0 0 2px var(--accent); }
-.su-tile.is-lock { opacity: .95; }
-.su-tile svg { width: 22px; height: 22px; color: var(--accent); }
-.su-tile b { font-size: 15px; font-weight: 650; }
-.su-tile i { font-style: normal; font-size: 12px; color: var(--muted); line-height: 1.4; }
-
-.su-tile .su-check {
-  position: absolute;
-  top: 10px;
-  right: 10px;
-  width: 22px;
-  height: 22px;
-  border-radius: 50%;
+.a2-frame {
   display: grid;
   place-items: center;
+  min-height: 196px;
+  padding: 16px 0 12px;
   background: var(--surface-2);
-  color: transparent;
-  transition: background-color .18s ease, color .18s ease;
 }
 
-.su-tile.is-on .su-check { background: var(--accent); color: var(--on-accent); }
-.su-tile .su-check svg { width: 13px; height: 13px; stroke-width: 3; color: currentColor; }
+.a2-art { width: 100%; max-width: 280px; height: auto; aspect-ratio: 4 / 3; }
+
+/* a phone is drawn portrait, so it gets the frame's full height instead of
+   sitting small in a landscape box */
+.a2-art.is-phone { max-width: 148px; aspect-ratio: 108 / 146; }
+
+/* the drawing: flat shapes, one accent ring on the thing to press */
+.a2-body { fill: var(--surface); stroke: var(--line); stroke-width: 2; }
+.a2-screen { fill: var(--bg); }
+.a2-bar { fill: var(--surface-2); }
+.a2-row { fill: var(--line); }
+.a2-row.is-on { fill: color-mix(in srgb, var(--accent) 30%, transparent); }
+.a2-ico { fill: none; stroke: var(--text); stroke-width: 1.7; stroke-linecap: round; stroke-linejoin: round; }
+.a2-ico circle, svg circle.a2-ico { fill: var(--text); stroke: none; }
+.a2-tick { fill: none; stroke: var(--accent); stroke-width: 5; stroke-linecap: round; stroke-linejoin: round; }
+
+.a2-hi {
+  fill: none;
+  stroke: var(--accent);
+  stroke-width: 2.2;
+  animation: a2Pulse 1.9s ease-in-out infinite;
+}
+
+.a2-arrow { fill: none; stroke: var(--accent); stroke-width: 2.2; stroke-linecap: round; stroke-linejoin: round; opacity: .75; }
+
+@keyframes a2Pulse {
+  50% { opacity: .35; }
+}
+
+.a2-say { display: flex; align-items: flex-start; gap: 12px; padding: 15px 16px 16px; }
+
+.a2-num {
+  flex: none;
+  width: 27px;
+  height: 27px;
+  display: grid;
+  place-items: center;
+  border-radius: 50%;
+  background: var(--accent);
+  color: #fff;
+  font-size: 14px;
+  font-weight: 700;
+}
+
+.a2-txt { min-width: 0; }
+.a2-txt b { display: block; font-size: 16px; font-weight: 650; letter-spacing: -.015em; }
+.a2-txt i { font-style: normal; display: block; margin-top: 2px; font-size: 13.5px; color: var(--muted); line-height: 1.45; }
+
+.a2-dots { display: flex; justify-content: center; gap: 6px; margin-top: 16px; }
+
+.a2-dots i {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--line);
+  transition: background-color .2s ease, transform .2s var(--ease);
+}
+
+.a2-dots i.is-on { background: var(--accent); transform: scale(1.35); }
+
+.su-foot { display: flex; flex-direction: column; gap: 4px; align-items: stretch; }
+.su-foot .btn { width: 100%; }
+.su-foot .link-btn { align-self: center; padding: 9px; }
 
 .su-hint { text-align: center; font-size: 13px; color: var(--muted); margin: 0 0 14px; }
 
@@ -3699,3 +3704,43 @@ body.no-motion *, body.no-motion *::before, body.no-motion *::after {
 /* a row that happens to be a link still reads as a row, not as body-text HTML */
 a.row { color: inherit; text-decoration: none; }
 a.row .row-title { color: var(--text); }
+
+
+/* ---------- the tour's own two pieces ---------- */
+/* a step that asks you to press something says so under the button */
+.sp-hint {
+  display: block;
+  margin-top: 9px;
+  text-align: center;
+  font-size: 12.5px;
+  color: var(--muted);
+}
+
+/* a short cheer when the sample task is checked off */
+.cheer {
+  position: fixed;
+  z-index: 90;
+  left: 50%;
+  bottom: calc(var(--tabbar-h) + var(--safe-bottom) + 22px);
+  transform: translateX(-50%);
+  max-width: calc(100% - 32px);
+  padding: 11px 18px;
+  border-radius: 999px;
+  background: var(--accent);
+  color: #fff;
+  font-size: 14.5px;
+  font-weight: 600;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  box-shadow: 0 12px 30px -12px rgba(10, 14, 30, .5);
+  animation: cheerIn .3s var(--ease) both;
+}
+
+.cheer.is-out { animation: cheerIn .28s var(--ease) reverse both; }
+
+@keyframes cheerIn {
+  from { opacity: 0; transform: translate(-50%, 12px) scale(.94); }
+}
+
+[data-style="notebook"] .cheer { border-radius: 999px 999px 998px 999px / 999px 998px 999px 999px; }

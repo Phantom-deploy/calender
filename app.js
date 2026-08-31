@@ -2020,7 +2020,7 @@ function periodsHTML() {
   const none = !periodList().length;
   return `<div class="section-head"><h2>Classes &amp; periods</h2>${rotChip()}</div>
     ${none && BELL.note ? `<p class="empty">${esc(BELL.note)}</p>` : ''}
-    <div class="card">${rows}${spare}
+    <div class="card" data-periods>${rows}${spare}
       <button class="row" data-act="new-class">${PLUS}
         <span class="row-main"><span class="row-title accent">New class</span></span></button>
     </div>`;
@@ -3958,6 +3958,16 @@ const TIPS = {
     d: 'In edit mode, open Pages to rename anything, drag the tabs into order, and give each one its own icon \u2014 a simple glyph, an emoji, or one you type yourself.' },
   school: { t: 'Your school',
     d: 'Pick your school and the whole app follows its bell schedule \u2014 period times, late starts, minimum days and finals. Change it here whenever you like.' },
+  tourSchedule: { t: 'Add your schedule',
+    d: 'Put your classes and periods in here and the whole app follows them. Or skip it \u2014 tap anywhere to move on.' },
+  tourHero: { t: 'Your live class countdown',
+    d: 'This tracks your next class in real time, counting down while you use the app. It follows your school\u2019s bell schedule on its own.' },
+  tourTask: { t: 'Try it out',
+    d: 'We left you a task called Visit Planner. Tap it to check it off.' },
+  tourEdit: { t: 'Make it yours',
+    d: 'This is edit mode. Every page is built from blocks \u2014 drag them around, add new ones, throw out what you don\u2019t use.' },
+  tourSettings: { t: 'Your school and your style',
+    d: 'Your school\u2019s bell schedule, the notebook or plain look, and the theme all live here. Everything else can wait until you want it.' },
   guess: { t: 'It picked the class for you',
     d: 'Filled in from the class you\u2019re in \u2014 or the one you just walked out of, since that\u2019s when homework gets set. Change it any time.' }
 };
@@ -3993,15 +4003,20 @@ function runTip() {
   const item = tipQueue.shift();
   if (!item) return;
   const el = document.querySelector(item.sel);
-  // whatever it describes has gone: drop it, but leave it unseen for later
-  if (!el || !el.getBoundingClientRect().width) return runTip();
+  // whatever it describes has gone: drop it, but leave it unseen for later.
+  // A tour step still hands on, or the chain would stop halfway.
+  if (!el || !el.getBoundingClientRect().width) {
+    if (item.after) { setTimeout(item.after, 60); return; }
+    return runTip();
+  }
 
   tipNow = item;
   const T = TIPS[item.id];
   spot.innerHTML = `<div class="sp-hole"></div>
     <div class="sp-card" role="dialog" aria-label="${esc(T.t)}">
       <b>${esc(T.t)}</b><p>${esc(T.d)}</p>
-      <button class="btn" type="button" data-act="tip-ok">Got it</button>
+      <button class="btn" type="button" data-act="tip-ok">${esc(item.ok || 'Got it')}</button>
+      ${item.hint ? `<span class="sp-hint">${esc(item.hint)}</span>` : ''}
     </div>`;
   spot.hidden = false;
   placeTip();
@@ -4037,20 +4052,42 @@ function placeTip() {
   }
 }
 
-function closeTip() {
-  if (tipNow) markTip(tipNow.id);
+function closeTip(delay) {
+  const done = tipNow;
+  if (done) markTip(done.id);
   tipNow = null;
   spot.hidden = true;
   spot.innerHTML = '';
   removeEventListener('resize', placeTip);
   removeEventListener('scroll', placeTip, true);
+  // a guided step carries the rest of the tour with it
+  if (done && done.after) {
+    setTimeout(done.after, typeof delay === 'number' ? delay : 300);
+    return;
+  }
   if (tipQueue.length) {
     clearTimeout(tipTimer);
     tipTimer = setTimeout(runTip, 240);
   }
 }
 
-spot.addEventListener('click', closeTip);
+/* The overlay swallows every click, so a step that asks you to press the thing
+   it is pointing at has to hand that one press through the hole itself.
+   Anywhere else still just dismisses \u2014 nothing in the tour is compulsory. */
+spot.addEventListener('click', e => {
+  const step = tipNow;
+  if (step?.through && e.target.closest('.sp-card') === null) {
+    const r = spot.querySelector('.sp-hole')?.getBoundingClientRect();
+    if (r && e.clientX >= r.left && e.clientX <= r.right &&
+        e.clientY >= r.top && e.clientY <= r.bottom) {
+      const target = document.querySelector(step.through);
+      closeTip(step.doneWait ?? 300);
+      target?.click();
+      return;
+    }
+  }
+  closeTip();
+});
 
 /* ---------------- events ---------------- */
 
@@ -4084,7 +4121,9 @@ document.addEventListener('click', e => {
       save();
       // In Tasks the row stays where it is, so only that row changes — no
       // rebuild, and nothing shifts under the finger that just tapped it.
-      if (state.tab === 'tasks') {
+      // The tour borrows the same hold: a list that drops finished work would
+      // otherwise make the sample task vanish before it is seen crossed off.
+      if (state.tab === 'tasks' || holdRow) {
         el.closest('.row')?.classList.toggle('is-done', h.done);
         el.setAttribute('aria-pressed', String(h.done));
         if (h.done) popCheck(el);
@@ -4929,18 +4968,11 @@ setInterval(() => {
 $('#syncBtn').addEventListener('click', openSyncSheet);
 
 /* ---------------- first run ----------------
-   A short walkthrough, then the fork: start from a template (pick 4 of the
-   5 classic sections \u2014 the fifth tray slot stays an Empty page, visible
-   proof the app is made of parts you control) or start from scratch.
+   Three short screens \u2014 school, style, home screen \u2014 and then the built
+   planner, with a guided tour through it. Nothing is asked for that the app
+   cannot start without, and there is no template-or-blank fork: everyone gets
+   the pages, and the Focus page is the empty one to build on.
    Existing users never see any of this; their data migrates silently. */
-
-const SU_TILES = [
-  { id: 'home', n: 'Home', d: 'The hub: timer, quick add, what\u2019s due.', ic: 'home', lock: 1 },
-  { id: 'calendar', n: 'Calendar', d: 'Month grid, dotted with your work.', ic: 'cal' },
-  { id: 'schedule', n: 'Schedule', d: 'Bell schedule and your classes.', ic: 'clock' },
-  { id: 'tasks', n: 'Tasks', d: 'Everything open, by deadline.', ic: 'tasks' },
-  { id: 'focus', n: 'Focus', d: 'Timed studying, phone locked out.', ic: 'target' }
-];
 
 function suPlatform() {
   if (matchMedia('(display-mode: standalone)').matches || navigator.standalone) return 'installed';
@@ -4950,21 +4982,76 @@ function suPlatform() {
   return 'desktop';
 }
 
-const SU_A2HS = {
-  installed: `<div class="su-step">${TICK_ACCENT}<span><b>Already installed</b>
-    You\u2019re running from the home screen \u2014 nothing to do here.</span></div>`,
-  ios: `<div class="su-step"><svg viewBox="0 0 24 24"><path d="M12 15V4M8 7.5L12 3.5l4 4"/><rect x="5" y="10.5" width="14" height="10" rx="2.5"/></svg>
-      <span><b>1 \u00b7 Open in Safari</b> Only Safari can install \u2014 Chrome on iPhone can\u2019t.</span></div>
-    <div class="su-step"><svg viewBox="0 0 24 24"><path d="M12 15V4M8 7.5L12 3.5l4 4"/><rect x="5" y="10.5" width="14" height="10" rx="2.5"/></svg>
-      <span><b>2 \u00b7 Tap Share</b> The square with the arrow, at the bottom of Safari.</span></div>
-    <div class="su-step"><svg viewBox="0 0 24 24"><rect x="4" y="4" width="16" height="16" rx="3.5"/><path d="M12 8.5v7M8.5 12h7"/></svg>
-      <span><b>3 \u00b7 Add to Home Screen</b> It launches like a real app and works offline.</span></div>`,
-  android: `<div class="su-step"><svg viewBox="0 0 24 24"><circle cx="12" cy="5.4" r="1.4"/><circle cx="12" cy="12" r="1.4"/><circle cx="12" cy="18.6" r="1.4"/></svg>
-      <span><b>1 \u00b7 Open Chrome\u2019s menu</b> The three dots, top right.</span></div>
-    <div class="su-step"><svg viewBox="0 0 24 24"><rect x="4" y="4" width="16" height="16" rx="3.5"/><path d="M12 8.5v7M8.5 12h7"/></svg>
-      <span><b>2 \u00b7 Add to Home screen</b> Or \u201cInstall app\u201d, if Chrome offers it.</span></div>`,
-  desktop: `<div class="su-step"><svg viewBox="0 0 24 24"><rect x="3.5" y="5" width="17" height="14" rx="3"/><path d="M12 9v5M9.5 11.5L12 14l2.5-2.5"/></svg>
-      <span><b>Install from the address bar</b> Most desktop browsers show a small install icon on the right of the address bar. Optional \u2014 the site works either way.</span></div>`
+/* ---------------- home-screen instructions ----------------
+   One step on screen at a time, each with a drawing of the actual control
+   and a ring around the exact thing to press. Reading a paragraph and then
+   hunting for a button is what made the old version hard to follow. */
+
+/* a phone body, drawn once and filled differently per step */
+const a2Phone = (inner) => `<svg class="a2-art is-phone" viewBox="46 2 108 146" aria-hidden="true">
+  <rect class="a2-body" x="52" y="6" width="96" height="138" rx="13"/>
+  ${inner}</svg>`;
+
+/* the ring that says "this one" */
+const a2Ring = (cx, cy, r = 13) => `<circle class="a2-hi" cx="${cx}" cy="${cy}" r="${r}"/>`;
+
+const A2HS_STEPS = {
+  ios: [
+    { n: 1, t: 'Tap the share button', d: 'At the bottom of Safari.',
+      art: a2Phone(`<rect class="a2-screen" x="58" y="18" width="84" height="104" rx="4"/>
+        <rect class="a2-bar" x="58" y="122" width="84" height="18" rx="4"/>
+        <path class="a2-ico" d="M100 135v-12M96 127l4-4 4 4"/>
+        <rect class="a2-ico" x="94" y="130" width="12" height="7" rx="1.6" fill="none"/>
+        ${a2Ring(100, 131, 11)}
+        <path class="a2-arrow" d="M100 96v22"/><path class="a2-arrow" d="M96 112l4 6 4-6"/>`) },
+    { n: 2, t: 'Choose Add to Home Screen', d: 'Scroll down the share sheet a little.',
+      art: a2Phone(`<rect class="a2-screen" x="58" y="60" width="84" height="80" rx="6"/>
+        <rect class="a2-row" x="64" y="70" width="72" height="12" rx="3"/>
+        <rect class="a2-row" x="64" y="87" width="72" height="12" rx="3"/>
+        <rect class="a2-row is-on" x="64" y="104" width="72" height="14" rx="3"/>
+        <path class="a2-ico" d="M126 111h6M129 108v6"/>
+        <rect class="a2-hi" x="61" y="101" width="78" height="20" rx="6"/>`) },
+    { n: 3, t: 'Tap Add', d: 'Top right. It lands on your home screen.',
+      art: a2Phone(`<rect class="a2-screen" x="58" y="18" width="84" height="104" rx="4"/>
+        <rect class="a2-row" x="66" y="30" width="34" height="9" rx="3"/>
+        <rect class="a2-row is-on" x="112" y="28" width="24" height="13" rx="5"/>
+        <rect class="a2-hi" x="108" y="24" width="32" height="21" rx="8"/>
+        <rect class="a2-row" x="66" y="54" width="68" height="9" rx="3"/>
+        <rect class="a2-row" x="66" y="68" width="46" height="9" rx="3"/>`) }
+  ],
+  android: [
+    { n: 1, t: 'Open Chrome\u2019s menu', d: 'The three dots, top right.',
+      art: a2Phone(`<rect class="a2-bar" x="58" y="12" width="84" height="18" rx="4"/>
+        <rect class="a2-screen" x="58" y="34" width="84" height="106" rx="4"/>
+        <circle class="a2-ico" cx="133" cy="17" r="1.7"/>
+        <circle class="a2-ico" cx="133" cy="21.5" r="1.7"/>
+        <circle class="a2-ico" cx="133" cy="26" r="1.7"/>
+        ${a2Ring(133, 21.5, 11)}
+        <path class="a2-arrow" d="M133 52V36"/><path class="a2-arrow" d="M129 40l4-6 4 6"/>`) },
+    { n: 2, t: 'Tap Add to Home screen', d: 'Or \u201cInstall app\u201d, if Chrome offers it.',
+      art: a2Phone(`<rect class="a2-screen" x="78" y="16" width="64" height="94" rx="5"/>
+        <rect class="a2-row" x="84" y="26" width="52" height="10" rx="3"/>
+        <rect class="a2-row" x="84" y="41" width="52" height="10" rx="3"/>
+        <rect class="a2-row is-on" x="84" y="56" width="52" height="12" rx="3"/>
+        <rect class="a2-row" x="84" y="73" width="52" height="10" rx="3"/>
+        <rect class="a2-hi" x="81" y="53" width="58" height="18" rx="6"/>`) }
+  ],
+  desktop: [
+    { n: 1, t: 'Install from the address bar', d: 'Most browsers show a small install icon on the right.',
+      art: `<svg class="a2-art" viewBox="0 0 200 150" aria-hidden="true">
+        <rect class="a2-body" x="14" y="24" width="172" height="102" rx="10"/>
+        <rect class="a2-bar" x="22" y="32" width="156" height="18" rx="9"/>
+        <rect class="a2-row" x="32" y="38" width="72" height="6" rx="3"/>
+        <path class="a2-ico" d="M162 36v9M158.5 41.5l3.5 3.5 3.5-3.5"/>
+        <path class="a2-ico" d="M157 47.5h10"/>
+        ${a2Ring(162, 41, 11)}
+        <rect class="a2-screen" x="22" y="56" width="156" height="62" rx="6"/></svg>` }
+  ],
+  installed: [
+    { n: '\u2713', t: 'Already installed', d: 'You\u2019re running it from the home screen. Nothing to do.',
+      art: a2Phone(`<rect class="a2-screen" x="58" y="18" width="84" height="122" rx="4"/>
+        <path class="a2-tick" d="M84 80l11 11 22-24"/>`) }
+  ]
 };
 
 let su = null;   // { el, step, picked }
@@ -5010,49 +5097,31 @@ function suHTML() {
       ${prefs.style !== 'default' ? `<p class="su-hint style-note">Notebook Style may load slightly slower because of its additional visual details and animations. We\u2019ll still keep it optimized and as lightweight as possible.</p>` : ''}
     </div>${next('Continue')}</div>`;
 
-  if (su.step === 3) return `<div class="su">${skip}<div class="su-body">
-      <span class="news-icon">${NEWS_ICONS.heart}</span>
-      <h1>Tell it your classes once</h1>
-      <p>Put a class in each period and the whole app wakes up: timers show real
-        class names, and new homework already knows which class it belongs to.</p>
-      <p>You can do it any time on the Schedule page \u2014 no need to now.</p>
-    </div>${next('Continue')}</div>`;
-  if (su.step === 4) return `<div class="su">${skip}<div class="su-body">
-      <span class="news-icon">${NEWS_ICONS.shield}</span>
+  /* Step 3: the home-screen instructions, one at a time. `su.a2` walks the
+     platform's own list; Continue is the only thing to press. */
+  const steps = A2HS_STEPS[suPlatform()];
+  const i = Math.min(su.a2, steps.length - 1);
+  const st = steps[i];
+  const last = i === steps.length - 1;
+  const dots = steps.length > 1
+    ? `<span class="a2-dots">${steps.map((_, k) =>
+        `<i class="${k === i ? 'is-on' : ''}"></i>`).join('')}</span>`
+    : '';
+  return `<div class="su">${skip}<div class="su-body su-a2">
       <h1>Put it on your home screen</h1>
-      <p>Installed, it opens instantly, works offline, and keeps your data safer.</p>
-      <div class="su-steps">${SU_A2HS[suPlatform()]}</div>
-    </div>${next('Continue')}</div>`;
-  if (su.step === 5) return `<div class="su">${skip}<div class="su-body">
-      <h1>How do you want to start?</h1>
-      <div class="su-fork">
-        <button class="su-card" data-su="tmpl" type="button">
-          <b>Start with a template</b>
-          <span>Pick four ready-made pages. One extra stays empty \u2014 yours to build.</span>
-        </button>
-        <button class="su-card" data-su="scratch" type="button">
-          <b>Create from scratch</b>
-          <span>Just Home, plus the block menu. Build every page yourself.</span>
-        </button>
+      <p class="su-sub">It opens instantly, works offline, and feels like a real app.</p>
+      <div class="a2-card">
+        <div class="a2-frame">${st.art}</div>
+        <div class="a2-say"><span class="a2-num">${st.n}</span>
+          <span class="a2-txt"><b>${st.t}</b><i>${st.d}</i></span></div>
       </div>
-    </div></div>`;
-  // step 5: the template picker
-  const tiles = SU_TILES.map(t => `
-    <button class="su-tile${su.picked.has(t.id) ? ' is-on' : ''}${t.lock ? ' is-lock' : ''}"
-      data-su="tile" data-id="${t.id}" type="button">
-      <span class="su-check"><svg viewBox="0 0 24 24"><path d="M5 12.5l4.5 4.5L19 7.5"/></svg></span>
-      ${ICONS[t.ic]}<b>${t.n}</b><i>${t.d}</i>
-    </button>`).join('');
-  const n = su.picked.size;
-  return `<div class="su">${skip}<div class="su-body">
-      <h1>Pick your four</h1>
-      <p>Home always comes along. A fifth, empty page is added too \u2014 so you can
-        see everything here is a block you can move.</p>
-      <div class="su-grid">${tiles}</div>
-      <p class="su-hint">${n === 4 ? 'Ready.' : `${n} of 4 picked`}</p>
+      ${dots}
     </div>
-    <div class="su-foot"><button class="btn" data-su="build" type="button"
-      ${n === 4 ? '' : 'disabled'}>Build my planner</button></div></div>`;
+    <div class="su-foot">
+      <button class="btn" data-su="${last ? 'done' : 'a2'}" type="button">${
+        last ? 'Start planning' : 'Next'}</button>
+      ${i ? '<button class="link-btn" data-su="a2-back" type="button">Back</button>' : ''}
+    </div></div>`;
 }
 
 function suPaint() {
@@ -5060,28 +5129,132 @@ function suPaint() {
   su.el.scrollTop = 0;
 }
 
-function suFinish(pages, edit) {
-  layout = fixLayout({ pages });
+/* Everyone lands on the same built planner. There is no template-or-blank
+   fork any more: the pages are the starting point, and the Focus page is the
+   empty one for anybody who wants to build from nothing. */
+function suFinish() {
+  layout = fixLayout({ pages: defaultPages() });
   saveLayout();
   try { localStorage.setItem('planner.onboard', '1'); } catch {}
+  seedSample();
   state.tab = 'home';
-  state.edit = !!edit;
+  state.edit = false;
   render();
   showView();
   su.el.classList.add('is-out');
   const el = su.el;
   su = null;
+  setTimeout(() => { el.remove(); startTour(); }, 320);
+}
+
+/* One real task, so the planner is never an empty shell on the first run and
+   the tour has something true to point at. */
+const SAMPLE_ID = 'sample-visit';
+
+function seedSample() {
+  if (db.homework.some(h => h.id === SAMPLE_ID)) return;
+  db.homework.push(touch({
+    id: SAMPLE_ID, title: 'Visit Planner', classId: '', due: today(),
+    details: 'Tap the circle to check it off — that is all there is to it.',
+    done: false, createdAt: Date.now()
+  }));
+  save();
+}
+
+/* ---------------- the guided tour ----------------
+   Five short stops through the planner they already have, in the order you
+   would actually meet it: the schedule that drives everything, the countdown
+   it produces, one real task to finish, then how to rearrange and configure
+   what they have just used. Every stop can be dismissed by tapping away, and
+   nothing on it is compulsory. */
+
+/* while a tour step asks you to finish something, the list it sits in holds
+   still long enough for the strike to draw itself */
+let holdRow = false;
+
+const goTab = id => {
+  if (!pageById(id)) return false;
+  state.tab = id;
+  state.classId = null;
+  render();
+  scrollTo(0, 0);
+  showView();
+  return true;
+};
+
+/** A short, quiet cheer — long enough to register, gone before it annoys. */
+function cheer(text) {
+  const el = document.createElement('div');
+  el.className = 'cheer';
+  el.textContent = text;
+  document.body.appendChild(el);
+  setTimeout(() => el.classList.add('is-out'), 1100);
+  setTimeout(() => el.remove(), 1650);
+}
+
+function startTour() {
+  // the tour covers all of these properly, so the old one-line hints retire —
+  // otherwise Settings would open onto two spotlights stacked in the wrong order
+  markTip('pencil');
+  markTip('gear');
+  markTip('school');
+  tourSchedule();
+}
+
+function tourSchedule() {
+  if (!goTab('schedule')) return tourHero();
+  tip('tourSchedule', '.view:not([hidden]) [data-periods]',
+    { round: 18, delay: 560, ok: 'Skip for now', hint: 'Or tap a period to fill it in',
+      after: tourHero });
+}
+
+function tourHero() {
+  if (!goTab('home')) return;
+  tip('tourHero', '.view:not([hidden]) .hero',
+    { round: 20, delay: 480, after: tourTask });
+}
+
+function tourTask() {
+  const row = `.view:not([hidden]) .row[data-id="${SAMPLE_ID}"]`;
+  holdRow = true;
+  // it lives in whichever list is showing it today; if it is gone, move along
+  tip('tourTask', row, {
+    round: 14, delay: 420, ok: 'Skip',
+    through: `.view:not([hidden]) .check[data-id="${SAMPLE_ID}"]`,
+    doneWait: 1150,
+    after: () => {
+      const done = byId(db.homework, SAMPLE_ID)?.done;
+      holdRow = false;
+      if (done) cheer('Nice \u2014 that\u2019s all there is to it.');
+      setTimeout(tourEdit, done ? 1000 : 120);
+    }
+  });
+}
+
+function tourEdit() {
+  goTab('home');
+  state.edit = true;
+  render();
+  showView();
+  markTip('edit');
+  tip('tourEdit', '.view:not([hidden]) .blk',
+    { round: 18, delay: 520, after: tourSettings });
+}
+
+function tourSettings() {
+  state.edit = false;
+  render();
+  showView();
   setTimeout(() => {
-    el.remove();
-    tip('pencil', '#editBtn', { round: 22, delay: 400 });
-    tip('gear', '#gearBtn', { round: 22 });
-  }, 320);
+    openSettings();
+    tip('tourSettings', '.sheet .card', { round: 16, delay: 460 });
+  }, 260);
 }
 
 function openSetup() {
   // someone meeting the app for the first time has nothing to catch up on
   markNewsSeen();
-  su = { el: document.createElement('div'), step: 0, picked: new Set(['home']) };
+  su = { el: document.createElement('div'), step: 0, a2: 0 };
   su.el.className = 'setup';
   document.body.appendChild(su.el);
   su.el.addEventListener('click', e => {
@@ -5089,9 +5262,9 @@ function openSetup() {
     if (!b || !su) return;
     const act = b.dataset.su;
     if (act === 'next') { su.step++; suPaint(); }
-    else if (act === 'skip') suFinish(defaultPages());
-    else if (act === 'scratch') suFinish([homePage()], true);
-    else if (act === 'tmpl') { su.step = 6; suPaint(); }
+    else if (act === 'a2') { su.a2++; suPaint(); }
+    else if (act === 'a2-back') { su.a2 = Math.max(0, su.a2 - 1); suPaint(); }
+    else if (act === 'done' || act === 'skip') suFinish();
     else if (act === 'style') {
       prefs.style = b.dataset.v;
       savePrefs();
@@ -5099,20 +5272,6 @@ function openSetup() {
       suPaint();
     }
     else if (act === 'school') { setSchool(b.dataset.k); suPaint(); }
-    else if (act === 'tile') {
-      const id = b.dataset.id;
-      if (id === 'home') return;               // locked in
-      su.picked.has(id) ? su.picked.delete(id) : su.picked.add(id);
-      if (su.picked.size > 4) {                 // room for only four
-        for (const x of su.picked) if (x !== 'home' && x !== id) { su.picked.delete(x); break; }
-      }
-      suPaint();
-    }
-    else if (act === 'build' && su.picked.size === 4) {
-      const pages = defaultPages().filter(pg => su.picked.has(pg.id));
-      pages.push({ id: 'p' + bid(), name: 'Your page', icon: '\u2726', blocks: [] });
-      suFinish(pages);
-    }
   });
   suPaint();
 }
