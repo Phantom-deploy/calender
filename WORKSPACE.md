@@ -446,12 +446,6 @@ anything) and no template-or-blank fork: everyone lands on the same built
 planner, `defaultPages()`, with the Focus page as the empty one to build on.
 `Skip` finishes from any screen and still builds the same thing.
 
-The home-screen guide is one drawn step at a time, walked by `su.a2`: an SVG of
-the actual control with an accent ring around the exact thing to press, a
-numbered line of at most a few words, progress dots, and one prominent button.
-`A2HS_STEPS` keys off `suPlatform()` — three steps on iOS, two on Android, one
-on desktop, and a single confirmation when already installed.
-
 Then `startTour()` runs five spotlights through the planner they now have, in
 the order you would actually meet it: the schedule that drives everything, the
 countdown it produces, one real task to finish, then how to rearrange and
@@ -473,6 +467,27 @@ already held its rows still for the same reason; the tour borrows that, then
 Settings would open onto two spotlights stacked in the wrong order.
 
 Existing users never see any of it. Flag: `planner.onboard`.
+
+## The install guide
+
+Asking someone to install an app they have not used yet is asking on the wrong
+side of the decision, so it comes **last** — after the tour, once the thing is
+worth keeping — as a sheet (`openInstall`), and it stays in Settings under
+*Add to home screen* for later. Someone already running standalone is never
+asked; their Settings row just says so.
+
+It adapts to the browser, not only the device, because the taps differ per
+browser: `suPlatform()` returns `ios-safari`, `ios-other`, `android-chrome`,
+`android-samsung`, `desktop` or `installed`. iPadOS reports itself as a Mac, so
+that case is caught by `maxTouchPoints`. On iPhone only Safari can install, so
+`ios-other` (Chrome, Firefox, Edge) opens by telling you to switch to Safari.
+
+The walk is one drawn step at a time: an SVG of the actual control with an
+accent ring on the exact thing to press, a numbered line of a few words,
+progress dots, Next/Back. On a phone a segmented switch offers the other likely
+browser (`A2HS_PAIR`) so a wrong guess costs one tap; changing it restarts the
+walk at step one. `A2HS_STEPS` holds three steps for iOS and Chrome-on-Android,
+two for Samsung Internet and desktop, one confirmation when installed.
 
 ## Visit counter
 

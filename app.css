@@ -1760,8 +1760,6 @@ main {
 .su p { margin: 0 0 10px; font-size: 16px; line-height: 1.6; color: var(--muted); }
 
 /* ---------- home-screen instructions: one drawn step at a time ---------- */
-.su-a2 .su-sub { margin-bottom: 18px; }
-
 .a2-card {
   border-radius: var(--r-card);
   background: var(--surface);
@@ -3744,3 +3742,17 @@ a.row .row-title { color: var(--text); }
 }
 
 [data-style="notebook"] .cheer { border-radius: 999px 999px 998px 999px / 999px 998px 999px 999px; }
+
+/* ---------- the install guide, as a sheet ---------- */
+.ins-lede { margin: -2px 0 14px; font-size: 14px; line-height: 1.5; color: var(--muted); }
+.ins-seg { margin-bottom: 14px; }
+
+.ins-foot { display: flex; flex-direction: column; gap: 4px; margin-top: 16px; }
+.ins-foot .btn { width: 100%; }
+.ins-foot .link-btn { align-self: center; padding: 9px; }
+
+/* inside a sheet the drawing has less room than it did full screen */
+.sheet .a2-frame { min-height: 168px; padding: 12px 0 8px; }
+.sheet .a2-art.is-phone { max-width: 128px; }
+.sheet .a2-art { max-width: 240px; }
+.sheet .a2-dots { margin-top: 14px; }

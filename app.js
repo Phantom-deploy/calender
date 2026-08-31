@@ -3517,6 +3517,11 @@ function openSettings() {
       <button class="row" data-act="share-open" type="button"><span class="row-main">
         <span class="row-title">Share with a friend</span>
         <span class="row-sub">Free and ad-free, and staying that way</span></span>${CHEV}</button>
+      <button class="row" data-act="install" type="button"><span class="row-main">
+        <span class="row-title">Add to home screen</span>
+        <span class="row-sub">${isInstalled() ? 'Already installed'
+          : onPhone() ? 'Opens instantly and works offline' : 'Install it as its own window'}</span>
+        </span>${CHEV}</button>
     </div>
 
     <p class="hint set-about">Planner \u00b7 the massive update, live.
@@ -4512,6 +4517,17 @@ document.addEventListener('click', e => {
 
     case 'news': openNews(0); break;
     case 'share-open': openShare(); break;
+    case 'install': openInstall(); break;
+
+    case 'ins-next': installUI.i++; paintInstall(); break;
+    case 'ins-back': installUI.i = Math.max(0, installUI.i - 1); paintInstall(); break;
+    case 'ins-view': {
+      if (installUI.view === el.dataset.v) break;
+      installUI.view = el.dataset.v;
+      installUI.i = 0;                       // a different browser is a different walk
+      paintInstall();
+      break;
+    }
     case 'share-do': doShare(el); break;
     case 'news-back': newsGo(-1); break;
     case 'news-dot': {
@@ -4974,13 +4990,29 @@ $('#syncBtn').addEventListener('click', openSyncSheet);
    the pages, and the Focus page is the empty one to build on.
    Existing users never see any of this; their data migrates silently. */
 
+/* Installing is a different set of taps in every browser, so the guide has to
+   know which one it is talking to — not just which kind of device. iPadOS
+   reports itself as a Mac, hence the touch-point check. */
 function suPlatform() {
-  if (matchMedia('(display-mode: standalone)').matches || navigator.standalone) return 'installed';
+  if (isInstalled()) return 'installed';
   const ua = navigator.userAgent;
-  if (/iPhone|iPad|iPod/.test(ua)) return 'ios';
-  if (/Android/.test(ua)) return 'android';
+  const iPadOS = /Macintosh/.test(ua) && navigator.maxTouchPoints > 1;
+  if (/iPhone|iPad|iPod/.test(ua) || iPadOS) {
+    // every iOS browser is Safari underneath, but only Safari's own share
+    // menu can install — Chrome and Firefox there have to hand over
+    return /CriOS|FxiOS|EdgiOS|OPT\//.test(ua) ? 'ios-other' : 'ios-safari';
+  }
+  if (/Android/.test(ua)) return /SamsungBrowser/.test(ua) ? 'android-samsung' : 'android-chrome';
   return 'desktop';
 }
+
+const isInstalled = () => {
+  try { return matchMedia('(display-mode: standalone)').matches || !!navigator.standalone; }
+  catch { return false; }
+};
+
+/* whether the guide should be shown at all, and whether it is a phone one */
+const onPhone = () => /^(ios|android)/.test(suPlatform());
 
 /* ---------------- home-screen instructions ----------------
    One step on screen at a time, each with a drawing of the actual control
@@ -4996,15 +5028,15 @@ const a2Phone = (inner) => `<svg class="a2-art is-phone" viewBox="46 2 108 146" 
 const a2Ring = (cx, cy, r = 13) => `<circle class="a2-hi" cx="${cx}" cy="${cy}" r="${r}"/>`;
 
 const A2HS_STEPS = {
-  ios: [
-    { n: 1, t: 'Tap the share button', d: 'At the bottom of Safari.',
+  'ios-safari': [
+    { n: 1, t: 'Tap the share button', d: 'The square with an arrow, at the bottom of Safari.',
       art: a2Phone(`<rect class="a2-screen" x="58" y="18" width="84" height="104" rx="4"/>
         <rect class="a2-bar" x="58" y="122" width="84" height="18" rx="4"/>
         <path class="a2-ico" d="M100 135v-12M96 127l4-4 4 4"/>
         <rect class="a2-ico" x="94" y="130" width="12" height="7" rx="1.6" fill="none"/>
         ${a2Ring(100, 131, 11)}
         <path class="a2-arrow" d="M100 96v22"/><path class="a2-arrow" d="M96 112l4 6 4-6"/>`) },
-    { n: 2, t: 'Choose Add to Home Screen', d: 'Scroll down the share sheet a little.',
+    { n: 2, t: 'Choose Add to Home Screen', d: 'Scroll the share sheet down a little.',
       art: a2Phone(`<rect class="a2-screen" x="58" y="60" width="84" height="80" rx="6"/>
         <rect class="a2-row" x="64" y="70" width="72" height="12" rx="3"/>
         <rect class="a2-row" x="64" y="87" width="72" height="12" rx="3"/>
@@ -5019,7 +5051,30 @@ const A2HS_STEPS = {
         <rect class="a2-row" x="66" y="54" width="68" height="9" rx="3"/>
         <rect class="a2-row" x="66" y="68" width="46" height="9" rx="3"/>`) }
   ],
-  android: [
+  /* On iPhone only Safari can actually install, so the first move is to get
+     there. After that it is the Safari guide, word for word. */
+  'ios-other': [
+    { n: 1, t: 'Open this page in Safari', d: 'Only Safari can install it on iPhone.',
+      art: a2Phone(`<rect class="a2-screen" x="58" y="18" width="84" height="104" rx="4"/>
+        <circle class="a2-hi" cx="100" cy="66" r="22"/>
+        <circle class="a2-ico" cx="100" cy="66" r="15" fill="none"/>
+        <path class="a2-ico" d="M94 72l14-6-6 14-14 6z"/>`) },
+    { n: 2, t: 'Tap the share button', d: 'The square with an arrow, at the bottom.',
+      art: a2Phone(`<rect class="a2-screen" x="58" y="18" width="84" height="104" rx="4"/>
+        <rect class="a2-bar" x="58" y="122" width="84" height="18" rx="4"/>
+        <path class="a2-ico" d="M100 135v-12M96 127l4-4 4 4"/>
+        <rect class="a2-ico" x="94" y="130" width="12" height="7" rx="1.6" fill="none"/>
+        ${a2Ring(100, 131, 11)}
+        <path class="a2-arrow" d="M100 96v22"/><path class="a2-arrow" d="M96 112l4 6 4-6"/>`) },
+    { n: 3, t: 'Choose Add to Home Screen', d: 'Then tap Add, top right.',
+      art: a2Phone(`<rect class="a2-screen" x="58" y="60" width="84" height="80" rx="6"/>
+        <rect class="a2-row" x="64" y="70" width="72" height="12" rx="3"/>
+        <rect class="a2-row" x="64" y="87" width="72" height="12" rx="3"/>
+        <rect class="a2-row is-on" x="64" y="104" width="72" height="14" rx="3"/>
+        <path class="a2-ico" d="M126 111h6M129 108v6"/>
+        <rect class="a2-hi" x="61" y="101" width="78" height="20" rx="6"/>`) }
+  ],
+  'android-chrome': [
     { n: 1, t: 'Open Chrome\u2019s menu', d: 'The three dots, top right.',
       art: a2Phone(`<rect class="a2-bar" x="58" y="12" width="84" height="18" rx="4"/>
         <rect class="a2-screen" x="58" y="34" width="84" height="106" rx="4"/>
@@ -5028,16 +5083,36 @@ const A2HS_STEPS = {
         <circle class="a2-ico" cx="133" cy="26" r="1.7"/>
         ${a2Ring(133, 21.5, 11)}
         <path class="a2-arrow" d="M133 52V36"/><path class="a2-arrow" d="M129 40l4-6 4 6"/>`) },
-    { n: 2, t: 'Tap Add to Home screen', d: 'Or \u201cInstall app\u201d, if Chrome offers it.',
+    { n: 2, t: 'Tap Add to Home screen', d: 'Or \u201cInstall app\u201d, if Chrome offers that.',
       art: a2Phone(`<rect class="a2-screen" x="78" y="16" width="64" height="94" rx="5"/>
         <rect class="a2-row" x="84" y="26" width="52" height="10" rx="3"/>
         <rect class="a2-row" x="84" y="41" width="52" height="10" rx="3"/>
         <rect class="a2-row is-on" x="84" y="56" width="52" height="12" rx="3"/>
         <rect class="a2-row" x="84" y="73" width="52" height="10" rx="3"/>
-        <rect class="a2-hi" x="81" y="53" width="58" height="18" rx="6"/>`) }
+        <rect class="a2-hi" x="81" y="53" width="58" height="18" rx="6"/>`) },
+    { n: 3, t: 'Confirm with Install', d: 'It lands on your home screen like any app.',
+      art: a2Phone(`<rect class="a2-screen" x="58" y="18" width="84" height="104" rx="4"/>
+        <rect class="a2-row" x="66" y="42" width="50" height="9" rx="3"/>
+        <rect class="a2-row" x="66" y="56" width="36" height="9" rx="3"/>
+        <rect class="a2-row is-on" x="98" y="78" width="38" height="14" rx="5"/>
+        <rect class="a2-hi" x="94" y="74" width="46" height="22" rx="8"/>`) }
+  ],
+  'android-samsung': [
+    { n: 1, t: 'Open the browser menu', d: 'The three lines, bottom right.',
+      art: a2Phone(`<rect class="a2-screen" x="58" y="14" width="84" height="106" rx="4"/>
+        <rect class="a2-bar" x="58" y="122" width="84" height="18" rx="4"/>
+        <path class="a2-ico" d="M128 128h9M128 131.5h9M128 135h9"/>
+        ${a2Ring(132, 131.5, 11)}
+        <path class="a2-arrow" d="M132 100v18"/><path class="a2-arrow" d="M128 112l4 6 4-6"/>`) },
+    { n: 2, t: 'Tap Add page to', d: 'Then choose Home screen.',
+      art: a2Phone(`<rect class="a2-screen" x="58" y="46" width="84" height="94" rx="5"/>
+        <rect class="a2-row" x="64" y="56" width="72" height="11" rx="3"/>
+        <rect class="a2-row is-on" x="64" y="72" width="72" height="13" rx="3"/>
+        <rect class="a2-row" x="64" y="90" width="72" height="11" rx="3"/>
+        <rect class="a2-hi" x="61" y="69" width="78" height="19" rx="6"/>`) }
   ],
   desktop: [
-    { n: 1, t: 'Install from the address bar', d: 'Most browsers show a small install icon on the right.',
+    { n: 1, t: 'Look in the address bar', d: 'Chrome and Edge show a small install icon on the right.',
       art: `<svg class="a2-art" viewBox="0 0 200 150" aria-hidden="true">
         <rect class="a2-body" x="14" y="24" width="172" height="102" rx="10"/>
         <rect class="a2-bar" x="22" y="32" width="156" height="18" rx="9"/>
@@ -5045,7 +5120,15 @@ const A2HS_STEPS = {
         <path class="a2-ico" d="M162 36v9M158.5 41.5l3.5 3.5 3.5-3.5"/>
         <path class="a2-ico" d="M157 47.5h10"/>
         ${a2Ring(162, 41, 11)}
-        <rect class="a2-screen" x="22" y="56" width="156" height="62" rx="6"/></svg>` }
+        <rect class="a2-screen" x="22" y="56" width="156" height="62" rx="6"/></svg>` },
+    { n: 2, t: 'Click Install', d: 'It opens in its own window, without the browser around it.',
+      art: `<svg class="a2-art" viewBox="0 0 200 150" aria-hidden="true">
+        <rect class="a2-body" x="14" y="24" width="172" height="102" rx="10"/>
+        <rect class="a2-bar" x="22" y="32" width="156" height="18" rx="9"/>
+        <rect class="a2-screen" x="96" y="54" width="86" height="52" rx="7"/>
+        <rect class="a2-row" x="104" y="64" width="44" height="7" rx="3"/>
+        <rect class="a2-row is-on" x="140" y="84" width="34" height="13" rx="5"/>
+        <rect class="a2-hi" x="136" y="80" width="42" height="21" rx="8"/></svg>` }
   ],
   installed: [
     { n: '\u2713', t: 'Already installed', d: 'You\u2019re running it from the home screen. Nothing to do.',
@@ -5053,6 +5136,12 @@ const A2HS_STEPS = {
         <path class="a2-tick" d="M84 80l11 11 22-24"/>`) }
   ]
 };
+
+/* Both phone families offer the same pair of choices, so a wrong guess about
+   the browser costs one tap to correct. */
+const A2HS_PAIR = () => /^ios/.test(suPlatform())
+  ? [['ios-safari', 'Safari'], ['ios-other', 'Chrome']]
+  : [['android-chrome', 'Chrome'], ['android-samsung', 'Samsung']];
 
 let su = null;   // { el, step, picked }
 
@@ -5095,33 +5184,10 @@ function suHTML() {
         </button>
       </div>
       ${prefs.style !== 'default' ? `<p class="su-hint style-note">Notebook Style may load slightly slower because of its additional visual details and animations. We\u2019ll still keep it optimized and as lightweight as possible.</p>` : ''}
-    </div>${next('Continue')}</div>`;
-
-  /* Step 3: the home-screen instructions, one at a time. `su.a2` walks the
-     platform's own list; Continue is the only thing to press. */
-  const steps = A2HS_STEPS[suPlatform()];
-  const i = Math.min(su.a2, steps.length - 1);
-  const st = steps[i];
-  const last = i === steps.length - 1;
-  const dots = steps.length > 1
-    ? `<span class="a2-dots">${steps.map((_, k) =>
-        `<i class="${k === i ? 'is-on' : ''}"></i>`).join('')}</span>`
-    : '';
-  return `<div class="su">${skip}<div class="su-body su-a2">
-      <h1>Put it on your home screen</h1>
-      <p class="su-sub">It opens instantly, works offline, and feels like a real app.</p>
-      <div class="a2-card">
-        <div class="a2-frame">${st.art}</div>
-        <div class="a2-say"><span class="a2-num">${st.n}</span>
-          <span class="a2-txt"><b>${st.t}</b><i>${st.d}</i></span></div>
-      </div>
-      ${dots}
     </div>
-    <div class="su-foot">
-      <button class="btn" data-su="${last ? 'done' : 'a2'}" type="button">${
-        last ? 'Start planning' : 'Next'}</button>
-      ${i ? '<button class="link-btn" data-su="a2-back" type="button">Back</button>' : ''}
-    </div></div>`;
+    <div class="su-foot"><button class="btn" data-su="done" type="button">Start planning</button></div></div>`;
+
+  return '';
 }
 
 function suPaint() {
@@ -5159,6 +5225,55 @@ function seedSample() {
     done: false, createdAt: Date.now()
   }));
   save();
+}
+
+/* ---------------- the install guide ----------------
+   It comes last, once the app has been used and is worth keeping. On a phone
+   it walks the browser's own taps one drawn step at a time, with a switch
+   between Safari and Chrome in case the guess about the browser is wrong.
+   On a computer it is the two clicks in the address bar. */
+const installUI = { view: '', i: 0 };
+
+function installHTML() {
+  const steps = A2HS_STEPS[installUI.view] || A2HS_STEPS.desktop;
+  const i = Math.min(installUI.i, steps.length - 1);
+  const st = steps[i];
+  const last = i === steps.length - 1;
+  const done = installUI.view === 'installed';
+  const pair = onPhone() && !done ? A2HS_PAIR() : null;
+
+  return `<div class="sheet-head"><h2 id="sheetTitle">${
+      done ? 'You\u2019re all set' : 'Keep it one tap away'}</h2>
+      <button class="link-btn" data-act="close" type="button">${done ? 'Done' : 'Not now'}</button></div>
+    <p class="ins-lede">${done
+      ? 'Running from your home screen \u2014 nothing else to do.'
+      : 'Add it to your home screen and it opens instantly, works offline, and drops the browser bars.'}</p>
+    ${pair ? `<div class="segmented ins-seg">${pair.map(([k, label]) =>
+      `<button type="button" data-act="ins-view" data-v="${k}"${
+        k === installUI.view ? ' class="is-active"' : ''}>${label}</button>`).join('')}</div>` : ''}
+    <div class="a2-card">
+      <div class="a2-frame">${st.art}</div>
+      <div class="a2-say"><span class="a2-num">${st.n}</span>
+        <span class="a2-txt"><b>${st.t}</b><i>${st.d}</i></span></div>
+    </div>
+    ${steps.length > 1 ? `<span class="a2-dots">${steps.map((_, k) =>
+      `<i class="${k === i ? 'is-on' : ''}"></i>`).join('')}</span>` : ''}
+    ${done ? '' : `<div class="ins-foot">
+      <button class="btn" data-act="${last ? 'close' : 'ins-next'}" type="button">${
+        last ? 'Got it' : 'Next'}</button>
+      ${i ? '<button class="link-btn" data-act="ins-back" type="button">Back</button>' : ''}
+    </div>`}`;
+}
+
+function openInstall() {
+  installUI.view = suPlatform();
+  installUI.i = 0;
+  openSheet(installHTML(), { mode: 'install', autofocus: false });
+}
+
+function paintInstall() {
+  if (ctx?.mode !== 'install') return;
+  sheet.innerHTML = `<div class="grabber"></div>` + installHTML();
 }
 
 /* ---------------- the guided tour ----------------
@@ -5247,8 +5362,15 @@ function tourSettings() {
   showView();
   setTimeout(() => {
     openSettings();
-    tip('tourSettings', '.sheet .card', { round: 16, delay: 460 });
+    // last of all, once the app has been used and is worth keeping around
+    tip('tourSettings', '.sheet .card', { round: 16, delay: 460, after: tourInstall });
   }, 260);
+}
+
+function tourInstall() {
+  if (isInstalled()) return;               // nothing to ask of someone who already did
+  closeSheet();
+  setTimeout(openInstall, 320);
 }
 
 function openSetup() {
