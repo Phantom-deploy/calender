@@ -462,9 +462,10 @@ one press through the hole and dismisses anywhere else. Nothing is compulsory.
 `holdRow` is why the cross-off is visible. Home's lists drop finished work, so
 without it the sample task vanishes the instant it is checked. The Tasks page
 already held its rows still for the same reason; the tour borrows that, then
-`tourEdit`'s render restores consistency. The tour marks `pencil`, `gear`,
-`school` and `edit` seen, since it covers all four properly — otherwise
-Settings would open onto two spotlights stacked in the wrong order.
+the next render restores consistency. The tour marks `pencil`, `gear`,
+`school`, `edit`, `addblk`, `picker` and `trayicons` seen, since it covers all
+of them properly — otherwise a queued hint cuts in front of the step doing the
+same job.
 
 Existing users never see any of it. Flag: `planner.onboard`.
 

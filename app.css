@@ -2822,38 +2822,6 @@ body.no-motion *, body.no-motion *::before, body.no-motion *::after {
 .stylep-nb i:nth-child(1) { background: #3f5bc7; }
 
 /* setup's style cards share the school-card skeleton */
-.su-styles { display: grid; gap: 10px; margin: 18px 0 4px; }
-
-.su-style {
-  position: relative;
-  display: flex;
-  align-items: center;
-  gap: 13px;
-  text-align: left;
-  padding: 13px 44px 13px 13px;
-  border-radius: 14px;
-  background: var(--surface);
-  box-shadow: inset 0 0 0 1.5px var(--line);
-  transition: box-shadow .18s ease, transform .18s var(--ease);
-}
-
-.su-style:active { transform: scale(.985); }
-.su-style.is-on { box-shadow: inset 0 0 0 2px var(--accent); }
-.su-style b { display: block; font-size: 15.5px; font-weight: 650; }
-.su-style i { display: block; font-style: normal; font-size: 12.5px; color: var(--muted); margin-top: 1px; }
-
-.su-style .su-check {
-  position: absolute;
-  top: 50%;
-  right: 13px;
-  margin-top: -11px;
-  color: transparent;
-  transform: scale(.6);
-  transition: color .18s ease, transform .18s var(--ease);
-}
-
-.su-style .su-check svg { width: 18px; height: 18px; stroke-width: 2.8; }
-.su-style.is-on .su-check { color: var(--accent); transform: none; }
 
 .style-note {
   padding: 10px 14px;

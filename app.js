@@ -85,7 +85,7 @@ const PREFS_KEY = 'planner.prefs.v1';
 const PREF_DEFAULTS = {
   school: 'delnorte',    // which school's bell schedule to follow
   style: 'notebook',     // notebook | default \u2014 notebook is the default
-  pageTurn: 0,           // opt-in page-turn transition (notebook only)
+  pageTurn: 1,           // page-turn transition between pages (notebook only)
   full: 0,               // opt-in: the whole page is one sheet, no cards
   rot: {},               // school -> { date, i }: what rotation day that date was
   theme: 'light',        // light | dark | auto (auto follows the evening)
@@ -3460,7 +3460,7 @@ function openSettings() {
     ${prefs.style !== 'default' ? `<div class="card set-card">
       ${setRow('Full notebook', setTog('full'),
         'One continuous sheet \u2014 no cards, and the paper scrolls with you. Off by default.')}
-      ${setRow('Page turns', setTog('pageTurn'), 'Pages flip like paper when you switch. Off by default.')}
+      ${setRow('Page turns', setTog('pageTurn'), 'Pages flip like paper when you switch.')}
     </div>` : ''}
     ${prefs.style !== 'default' ? `<p class="hint style-note">Notebook Style may load slightly slower because of its additional visual details and animations. We\u2019ll still keep it optimized and as lightweight as possible.</p>` : ''}
 
@@ -3963,14 +3963,20 @@ const TIPS = {
     d: 'In edit mode, open Pages to rename anything, drag the tabs into order, and give each one its own icon \u2014 a simple glyph, an emoji, or one you type yourself.' },
   school: { t: 'Your school',
     d: 'Pick your school and the whole app follows its bell schedule \u2014 period times, late starts, minimum days and finals. Change it here whenever you like.' },
+  tourToSchedule: { t: 'Start with your schedule',
+    d: 'Tap Schedule to open it.' },
   tourSchedule: { t: 'Add your schedule',
-    d: 'Put your classes and periods in here and the whole app follows them. Or skip it \u2014 tap anywhere to move on.' },
+    d: 'Tap a period to put a class in it and the whole app follows along \u2014 or skip this and come back later.' },
+  tourToHome: { t: 'Back to Home',
+    d: 'Tap Home. It is the page you will land on every time you open the app.' },
   tourHero: { t: 'Your live class countdown',
     d: 'This tracks your next class in real time, counting down while you use the app. It follows your school\u2019s bell schedule on its own.' },
   tourTask: { t: 'Try it out',
     d: 'We left you a task called Visit Planner. Tap it to check it off.' },
-  tourEdit: { t: 'Make it yours',
-    d: 'This is edit mode. Every page is built from blocks \u2014 drag them around, add new ones, throw out what you don\u2019t use.' },
+  tourPencil: { t: 'Now make it yours',
+    d: 'Tap the pencil to open edit mode, where every page can be rearranged.' },
+  tourAddBlk: { t: 'Add a block',
+    d: 'Pages are built from blocks. Tap Add block to see the sixty-six you can choose from.' },
   tourSettings: { t: 'Your school and your style',
     d: 'Your school\u2019s bell schedule, the notebook or plain look, and the theme all live here. Everything else can wait until you want it.' },
   guess: { t: 'It picked the class for you',
@@ -4002,6 +4008,17 @@ function tip(id, sel, opts = {}) {
 
 const tipsBlocked = () => !!document.querySelector('.setup') || focusActive();
 
+/* The tab bar and the top bar are pinned to the edges, so they always look
+   "off screen" to the check below — and scrolling for them would do nothing
+   but cost the step a beat. */
+function isPinned(el) {
+  for (let n = el; n && n !== document.body; n = n.parentElement) {
+    const pos = getComputedStyle(n).position;
+    if (pos === 'fixed' || pos === 'sticky') return true;
+  }
+  return false;
+}
+
 function runTip() {
   if (tipNow) return;
   if (tipsBlocked()) { tipQueue = []; return; }
@@ -4015,6 +4032,18 @@ function runTip() {
     return runTip();
   }
 
+  // Bring it into view before drawing anything: placing the hole first and
+  // letting the scroll catch up leaves the ring on whatever was there before.
+  // The step goes back to the front of the queue and waits for the scroll.
+  const box = el.getBoundingClientRect();
+  if (!item.scrolled && !isPinned(el) && (box.top < 72 || box.bottom > innerHeight - 96)) {
+    el.scrollIntoView({ block: 'center', behavior: prefs.motion ? 'smooth' : 'auto' });
+    tipQueue.unshift({ ...item, scrolled: true });
+    clearTimeout(tipTimer);
+    tipTimer = setTimeout(runTip, prefs.motion ? 460 : 80);
+    return;
+  }
+
   tipNow = item;
   const T = TIPS[item.id];
   spot.innerHTML = `<div class="sp-hole"></div>
@@ -4026,6 +4055,7 @@ function runTip() {
   spot.hidden = false;
   placeTip();
   requestAnimationFrame(placeTip);   // again, once the card has a real height
+  for (const ms of [120, 320, 620]) setTimeout(placeTip, ms);
   addEventListener('resize', placeTip);
   addEventListener('scroll', placeTip, true);
 }
@@ -4057,7 +4087,7 @@ function placeTip() {
   }
 }
 
-function closeTip(delay) {
+function closeTip(delay, viaThrough) {
   const done = tipNow;
   if (done) markTip(done.id);
   tipNow = null;
@@ -4065,9 +4095,11 @@ function closeTip(delay) {
   spot.innerHTML = '';
   removeEventListener('resize', placeTip);
   removeEventListener('scroll', placeTip, true);
-  // a guided step carries the rest of the tour with it
-  if (done && done.after) {
-    setTimeout(done.after, typeof delay === 'number' ? delay : 300);
+  // a guided step carries the rest of the tour with it. Pressing the thing it
+  // points at is not the same as dismissing it, so it can lead somewhere else.
+  const next = (viaThrough && done && done.onThrough) || done?.after;
+  if (next) {
+    setTimeout(next, typeof delay === 'number' ? delay : 300);
     return;
   }
   if (tipQueue.length) {
@@ -4081,16 +4113,21 @@ function closeTip(delay) {
    Anywhere else still just dismisses \u2014 nothing in the tour is compulsory. */
 spot.addEventListener('click', e => {
   const step = tipNow;
-  if (step?.through && e.target.closest('.sp-card') === null) {
+  if (!step) return;
+  const outside = e.target.closest('.sp-card') === null;
+  if (step.through && outside) {
     const r = spot.querySelector('.sp-hole')?.getBoundingClientRect();
     if (r && e.clientX >= r.left && e.clientX <= r.right &&
         e.clientY >= r.top && e.clientY <= r.bottom) {
       const target = document.querySelector(step.through);
-      closeTip(step.doneWait ?? 300);
+      closeTip(step.doneWait ?? 300, true);
       target?.click();
       return;
     }
   }
+  // a step that is waiting for one particular press stays put until it happens
+  // (its own button is still a way out)
+  if (step.sticky && outside) return;
   closeTip();
 });
 
@@ -4917,6 +4954,18 @@ try {
     localStorage.setItem('planner.lightNotebook', '1');
   }
 } catch {}
+
+/* Page turns became a default rather than an opt-in, so every device gets them
+   switched on once — a device that saved prefs before the change would
+   otherwise keep the old zero forever. Once only, so turning them back off
+   sticks. */
+try {
+  if (!localStorage.getItem('planner.pageTurnOn')) {
+    prefs.pageTurn = 1;
+    savePrefs();
+    localStorage.setItem('planner.pageTurnOn', '1');
+  }
+} catch {}
 applyPrefs();
 $('#gearBtn').addEventListener('click', openSettings);
 
@@ -5166,24 +5215,6 @@ function suHTML() {
           <span class="su-check"><svg viewBox="0 0 24 24"><path d="M5 12.5l4.5 4.5L19 7.5"/></svg></span>
         </button>`;
       }).join('')}</div>
-    </div>${next('Continue')}</div>`;
-
-  if (su.step === 2) return `<div class="su">${skip}<div class="su-body">
-      <h1>Pick a style</h1>
-      <p>The whole app follows it, and Settings can change it any time.</p>
-      <div class="su-styles">
-        <button class="su-style${prefs.style !== 'default' ? ' is-on' : ''}" data-su="style" data-v="notebook" type="button">
-          <span class="stylep stylep-nb"><i></i><i></i><i></i></span>
-          <b>Notebook</b><i>Paper, ink, and a handwritten feel.</i>
-          <span class="su-check"><svg viewBox="0 0 24 24"><path d="M5 12.5l4.5 4.5L19 7.5"/></svg></span>
-        </button>
-        <button class="su-style${prefs.style === 'default' ? ' is-on' : ''}" data-su="style" data-v="default" type="button">
-          <span class="stylep stylep-def"><i></i><i></i><i></i></span>
-          <b>Default</b><i>Plain and quick \u2014 the lighter option.</i>
-          <span class="su-check"><svg viewBox="0 0 24 24"><path d="M5 12.5l4.5 4.5L19 7.5"/></svg></span>
-        </button>
-      </div>
-      ${prefs.style !== 'default' ? `<p class="su-hint style-note">Notebook Style may load slightly slower because of its additional visual details and animations. We\u2019ll still keep it optimized and as lightweight as possible.</p>` : ''}
     </div>
     <div class="su-foot"><button class="btn" data-su="done" type="button">Start planning</button></div></div>`;
 
@@ -5309,57 +5340,108 @@ function cheer(text) {
 
 function startTour() {
   // the tour covers all of these properly, so the old one-line hints retire —
-  // otherwise Settings would open onto two spotlights stacked in the wrong order
-  markTip('pencil');
-  markTip('gear');
-  markTip('school');
-  tourSchedule();
+  // otherwise a step would open onto two spotlights stacked in the wrong order
+  // everything edit mode and Settings would volunteer on their own: the tour
+  // opens both, and a queued hint would cut in front of the step doing it
+  for (const id of ['pencil', 'gear', 'school', 'edit', 'addblk', 'picker', 'trayicons'])
+    markTip(id);
+  tourToSchedule();
 }
 
-function tourSchedule() {
-  if (!goTab('schedule')) return tourHero();
-  tip('tourSchedule', '.view:not([hidden]) [data-periods]',
-    { round: 18, delay: 560, ok: 'Skip for now', hint: 'Or tap a period to fill it in',
-      after: tourHero });
-}
-
-function tourHero() {
-  if (!goTab('home')) return;
-  tip('tourHero', '.view:not([hidden]) .hero',
-    { round: 20, delay: 480, after: tourTask });
-}
-
-function tourTask() {
-  const row = `.view:not([hidden]) .row[data-id="${SAMPLE_ID}"]`;
-  holdRow = true;
-  // it lives in whichever list is showing it today; if it is gone, move along
-  tip('tourTask', row, {
-    round: 14, delay: 420, ok: 'Skip',
-    through: `.view:not([hidden]) .check[data-id="${SAMPLE_ID}"]`,
-    doneWait: 1150,
-    after: () => {
-      const done = byId(db.homework, SAMPLE_ID)?.done;
-      holdRow = false;
-      if (done) cheer('Nice \u2014 that\u2019s all there is to it.');
-      setTimeout(tourEdit, done ? 1000 : 120);
-    }
+/* Pages are never switched out from under anyone: each move is a spotlight on
+   the tab itself, and the tour waits for that tap. */
+function tourToSchedule() {
+  tip('tourToSchedule', '#tabbar .tab[data-to="schedule"]', {
+    round: 16, delay: 620, pad: 6, sticky: true,
+    through: '#tabbar .tab[data-to="schedule"]',
+    onThrough: () => setTimeout(tourSchedule, 420)
   });
 }
 
-function tourEdit() {
-  goTab('home');
-  state.edit = true;
-  render();
-  showView();
-  markTip('edit');
-  tip('tourEdit', '.view:not([hidden]) .blk',
-    { round: 18, delay: 520, after: tourSettings });
+/* Tapping a period opens that period — it must not also count as "next".
+   The tour picks up again when the sheet closes, whether or not a class was
+   actually added. */
+function tourSchedule() {
+  tip('tourSchedule', '.view:not([hidden]) [data-periods]', {
+    round: 18, delay: 360, ok: 'Skip for now', hint: 'Or tap a period to fill it in',
+    through: '.view:not([hidden]) [data-periods] .row',
+    onThrough: () => afterSheet(() => setTimeout(tourToHome, 380)),
+    after: tourToHome
+  });
+}
+
+/* Wait for whatever sheet is open to be dismissed, then carry on. */
+function afterSheet(fn) {
+  if (wrap.hidden) return fn();
+  const t = setInterval(() => {
+    if (!wrap.hidden) return;
+    clearInterval(t);
+    fn();
+  }, 160);
+}
+
+function tourToHome() {
+  tip('tourToHome', '#tabbar .tab[data-to="home"]', {
+    round: 16, delay: 420, pad: 6, sticky: true,
+    through: '#tabbar .tab[data-to="home"]',
+    onThrough: () => setTimeout(tourHero, 420)
+  });
+}
+
+function tourHero() {
+  tip('tourHero', '.view:not([hidden]) .hero', { round: 20, delay: 420, after: tourTask });
+}
+
+/* Seven seconds to check it off. Finishing early moves on once the strike has
+   drawn itself; doing nothing moves on when the time is up. It cannot be
+   tapped away, so the window is the same either way. */
+function tourTask() {
+  const row = `.view:not([hidden]) .row[data-id="${SAMPLE_ID}"]`;
+  holdRow = true;
+  let moved = false;
+  let timer = 0;
+  const go = wait => {
+    if (moved) return;
+    moved = true;
+    clearTimeout(timer);
+    holdRow = false;
+    if (byId(db.homework, SAMPLE_ID)?.done) cheer('Nice \u2014 that\u2019s all there is to it.');
+    setTimeout(tourPencil, wait);
+  };
+  timer = setTimeout(() => { if (!moved) closeTip(); }, 7000);
+  tip('tourTask', row, {
+    round: 14, delay: 420, ok: 'Skip', sticky: true,
+    through: `.view:not([hidden]) .check[data-id="${SAMPLE_ID}"]`,
+    doneWait: 1150,
+    onThrough: () => go(1000),
+    after: () => go(140)
+  });
+}
+
+/* Edit mode is opened by the person, not for them. */
+function tourPencil() {
+  tip('tourPencil', '#editBtn', {
+    round: 22, delay: 420, pad: 6, sticky: true,
+    through: '#editBtn',
+    onThrough: () => setTimeout(tourAddBlk, 520)
+  });
+}
+
+function tourAddBlk() {
+  if (!state.edit) return tourSettings();
+  tip('tourAddBlk', '.view:not([hidden]) .add-blk', {
+    round: 18, delay: 360, sticky: true,
+    through: '.view:not([hidden]) .add-blk',
+    onThrough: () => setTimeout(() => {
+      closeSheet();                       // seen it open; back out tidily
+      if (state.edit) { state.edit = false; render(); showView(); }
+      setTimeout(tourSettings, 320);
+    }, 1400)
+  });
 }
 
 function tourSettings() {
-  state.edit = false;
-  render();
-  showView();
+  if (state.edit) { state.edit = false; render(); showView(); }
   setTimeout(() => {
     openSettings();
     // last of all, once the app has been used and is worth keeping around
@@ -5387,12 +5469,6 @@ function openSetup() {
     else if (act === 'a2') { su.a2++; suPaint(); }
     else if (act === 'a2-back') { su.a2 = Math.max(0, su.a2 - 1); suPaint(); }
     else if (act === 'done' || act === 'skip') suFinish();
-    else if (act === 'style') {
-      prefs.style = b.dataset.v;
-      savePrefs();
-      applyStyle();          // the setup screen restyles itself: a live preview
-      suPaint();
-    }
     else if (act === 'school') { setSchool(b.dataset.k); suPaint(); }
   });
   suPaint();
