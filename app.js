@@ -4054,6 +4054,7 @@ function runTip() {
     </div>`;
   spot.hidden = false;
   placeTip();
+  item.onShow?.();          // timed steps count from when they can be seen
   requestAnimationFrame(placeTip);   // again, once the card has a real height
   for (const ms of [120, 320, 620]) setTimeout(placeTip, ms);
   addEventListener('resize', placeTip);
@@ -4069,10 +4070,10 @@ function placeTip() {
   const hole = spot.querySelector('.sp-hole');
   const card = spot.querySelector('.sp-card');
   if (!hole || !card) return;
-  const top = Math.max(4, r.top - pad);
-  const left = Math.max(4, r.left - pad);
-  const w = Math.min(innerWidth - left - 4, r.width + pad * 2);
-  const h = Math.min(innerHeight - top - 4, r.height + pad * 2);
+  const top = Math.max(0, r.top - pad);
+  const left = Math.max(0, r.left - pad);
+  const w = Math.min(innerWidth - left, r.width + pad * 2);
+  const h = Math.min(innerHeight - top, r.height + pad * 2);
   hole.style.cssText = `top:${top}px;left:${left}px;width:${w}px;height:${h}px;` +
     `border-radius:${tipNow.round ?? 14}px`;
 
@@ -4116,10 +4117,17 @@ spot.addEventListener('click', e => {
   if (!step) return;
   const outside = e.target.closest('.sp-card') === null;
   if (step.through && outside) {
+    const hit = b => b && e.clientX >= b.left && e.clientX <= b.right &&
+                     e.clientY >= b.top && e.clientY <= b.bottom;
     const r = spot.querySelector('.sp-hole')?.getBoundingClientRect();
-    if (r && e.clientX >= r.left && e.clientX <= r.right &&
-        e.clientY >= r.top && e.clientY <= r.bottom) {
-      const target = document.querySelector(step.through);
+    const t = document.querySelector(step.sel)?.getBoundingClientRect();
+    if (hit(r) || hit(t)) {
+      // press what is actually under the finger — a hole over a list of
+      // periods must open the one that was tapped, not the first in the list
+      spot.style.pointerEvents = 'none';
+      const under = document.elementFromPoint(e.clientX, e.clientY);
+      spot.style.pointerEvents = '';
+      const target = under?.closest(step.through) || document.querySelector(step.through);
       closeTip(step.doneWait ?? 300, true);
       target?.click();
       return;
@@ -5352,9 +5360,10 @@ function startTour() {
    the tab itself, and the tour waits for that tap. */
 function tourToSchedule() {
   tip('tourToSchedule', '#tabbar .tab[data-to="schedule"]', {
-    round: 16, delay: 620, pad: 6, sticky: true,
+    round: 16, delay: 620, pad: 6, sticky: true, ok: 'Skip',
     through: '#tabbar .tab[data-to="schedule"]',
-    onThrough: () => setTimeout(tourSchedule, 420)
+    onThrough: () => setTimeout(tourSchedule, 420),
+    after: tourHero              // skipped the schedule: stay here, carry on
   });
 }
 
@@ -5370,11 +5379,14 @@ function tourSchedule() {
   });
 }
 
-/* Wait for whatever sheet is open to be dismissed, then carry on. */
+/* Wait for whatever sheet is open to be dismissed, then carry on. Capped, so
+   a sheet left open forever does not leave a timer running behind it. */
 function afterSheet(fn) {
   if (wrap.hidden) return fn();
+  let waited = 0;
   const t = setInterval(() => {
-    if (!wrap.hidden) return;
+    waited += 160;
+    if (!wrap.hidden && waited < 120000) return;
     clearInterval(t);
     fn();
   }, 160);
@@ -5382,9 +5394,10 @@ function afterSheet(fn) {
 
 function tourToHome() {
   tip('tourToHome', '#tabbar .tab[data-to="home"]', {
-    round: 16, delay: 420, pad: 6, sticky: true,
+    round: 16, delay: 420, pad: 6, sticky: true, ok: 'Skip',
     through: '#tabbar .tab[data-to="home"]',
-    onThrough: () => setTimeout(tourHero, 420)
+    onThrough: () => setTimeout(tourHero, 420),
+    after: tourHero
   });
 }
 
@@ -5408,9 +5421,10 @@ function tourTask() {
     if (byId(db.homework, SAMPLE_ID)?.done) cheer('Nice \u2014 that\u2019s all there is to it.');
     setTimeout(tourPencil, wait);
   };
-  timer = setTimeout(() => { if (!moved) closeTip(); }, 7000);
   tip('tourTask', row, {
     round: 14, delay: 420, ok: 'Skip', sticky: true,
+    // seven seconds of actually being on screen, not seven from being queued
+    onShow: () => { timer = setTimeout(() => { if (!moved) closeTip(); }, 7000); },
     through: `.view:not([hidden]) .check[data-id="${SAMPLE_ID}"]`,
     doneWait: 1150,
     onThrough: () => go(1000),
@@ -5421,17 +5435,19 @@ function tourTask() {
 /* Edit mode is opened by the person, not for them. */
 function tourPencil() {
   tip('tourPencil', '#editBtn', {
-    round: 22, delay: 420, pad: 6, sticky: true,
+    round: 22, delay: 420, pad: 6, sticky: true, ok: 'Skip',
     through: '#editBtn',
-    onThrough: () => setTimeout(tourAddBlk, 520)
+    onThrough: () => setTimeout(tourAddBlk, 520),
+    after: tourSettings
   });
 }
 
 function tourAddBlk() {
   if (!state.edit) return tourSettings();
   tip('tourAddBlk', '.view:not([hidden]) .add-blk', {
-    round: 18, delay: 360, sticky: true,
+    round: 18, delay: 360, sticky: true, ok: 'Skip',
     through: '.view:not([hidden]) .add-blk',
+    after: tourSettings,
     onThrough: () => setTimeout(() => {
       closeSheet();                       // seen it open; back out tidily
       if (state.edit) { state.edit = false; render(); showView(); }

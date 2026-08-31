@@ -440,11 +440,12 @@ First run only (no data, no layout). The principle is **start, experience,
 customise** — nothing is asked for that the app cannot start without, and
 nothing is taught before it has been used.
 
-Three screens — welcome, school, style — then the home-screen guide. There is
-no classes step (that used to demand data before the product had shown
-anything) and no template-or-blank fork: everyone lands on the same built
-planner, `defaultPages()`, with the Focus page as the empty one to build on.
-`Skip` finishes from any screen and still builds the same thing.
+Two screens — welcome and school — and that is the whole of it. There is no
+classes step (it demanded data before the product had shown anything), no
+template-or-blank fork, and no style question: Notebook is simply what you get,
+and Settings is where it changes. Everyone lands on the same built planner,
+`defaultPages()`, with the Focus page as the empty one to build on. `Skip`
+finishes from either screen and still builds the same thing.
 
 Then `startTour()` runs five spotlights through the planner they now have, in
 the order you would actually meet it: the schedule that drives everything, the
@@ -452,12 +453,41 @@ countdown it produces, one real task to finish, then how to rearrange and
 configure what they just used. `seedSample()` plants that task — **Visit
 Planner**, due today, `SAMPLE_ID`.
 
-Two pieces of the spotlight system exist for this. A step can carry `after`,
-which `closeTip()` runs instead of pulling the next queued tip, so the chain
-survives a dismissal *and* a missing target (`runTip` hands on rather than
-stopping halfway). And a step can carry `through`: the overlay swallows every
-click, so a step that asks you to press the thing it is pointing at passes that
-one press through the hole and dismisses anywhere else. Nothing is compulsory.
+**Nothing happens to the person; they make it happen.** Pages are never
+switched underneath them — each move is a spotlight on the tab itself, waiting
+for that tap — and edit mode opens because they press the pencil, not because
+the tour pressed it for them.
+
+Five pieces of the spotlight system exist for this:
+
+- `after` — run by `closeTip()` instead of pulling the next queued tip, so the
+  chain survives a dismissal *and* a missing target (`runTip` hands on rather
+  than stopping halfway). **Every** step needs one: a step whose button only
+  had an `onThrough` ended the tour silently when that button was pressed.
+- `through` — the overlay swallows every click, so a step that asks you to
+  press the thing it points at passes that one press through the hole. It
+  presses *what is under the finger* (`elementFromPoint`, overlay briefly
+  ignored), falling back to the selector — a hole over a list of periods must
+  open the period that was tapped, not the first one in it.
+- `onThrough` — where that press leads, when it differs from dismissing.
+  Tapping a period opens the period; it must **not** also count as "next", so
+  the schedule step waits (`afterSheet`) and resumes when the sheet closes.
+- `sticky` — a step waiting for one particular press is not dismissed by
+  tapping elsewhere. Its own button is still the way out.
+- `onShow` — fired when the step actually appears, so a timed step counts from
+  when it can be seen rather than from when it was queued.
+
+`runTip` scrolls a target into view *before* drawing anything, then requeues
+the step behind the scroll: placing the hole first and letting the scroll catch
+up rings whatever used to be there. `isPinned()` skips that for the tab bar and
+top bar, which sit at the edges and would otherwise always look off-screen. The
+hit test accepts the target's own rectangle as well as the hole's, and the hole
+runs to the very edge of the screen — the tab bar sits against it, and an inset
+left part of the tab outside its own ring on a phone with a home indicator.
+
+The task step runs on a seven-second window. Checking it off early moves on
+once the strike has drawn itself; doing nothing moves on when the time is up.
+It is `sticky`, so the window is the same either way.
 
 `holdRow` is why the cross-off is visible. Home's lists drop finished work, so
 without it the sample task vanishes the instant it is checked. The Tasks page
