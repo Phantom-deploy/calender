@@ -745,12 +745,16 @@ function dayGroupsHTML(list, opts = {}) {
   }
   return [...byDay.entries()].sort((a, b) => a[0] < b[0] ? -1 : 1).map(([d, items]) => {
     const dt = parseISO(d);
-    const rel = relLabel(d);
     const wd = dt.toLocaleDateString(undefined, { weekday: 'long' });
+    // the chip gives the date and the heading gives the weekday, so this line
+    // only earns its place when it says something neither of them does
+    const n = daysBetween(today(), d);
+    const rel = n === 0 ? 'Today' : n === 1 ? 'Tomorrow' : n === -1 ? 'Yesterday'
+      : n < 0 ? `${-n} days late` : n <= 13 ? `in ${n} days` : '';
     return `<section class="dg${d === today() ? ' is-today' : ''}${d < today() ? ' is-past' : ''}">
       <header class="dg-h">
         <span class="dg-date"><b>${dt.getDate()}</b><i>${dt.toLocaleDateString(undefined, { month: 'short' })}</i></span>
-        <span class="dg-when"><b>${wd}</b>${rel && rel.toLowerCase() !== wd.toLowerCase() ? `<i>${esc(rel)}</i>` : ''}</span>
+        <span class="dg-when"><b>${wd}</b>${rel ? `<i>${esc(rel)}</i>` : ''}</span>
         <span class="dg-n">${items.length}</span>
       </header>
       <div class="dg-list">${items.map(x => rowHTML(x, { ...opts, hideDate: true })).join('')}</div>

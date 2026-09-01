@@ -3352,6 +3352,7 @@ body.no-motion *, body.no-motion *::before, body.no-motion *::after {
 .panel.is-grouped {
   background: none;
   box-shadow: none;
+  border: 0;                 /* notebook draws one on every .panel */
   border-radius: 0;
   overflow: visible;
 }
