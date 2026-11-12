@@ -119,7 +119,7 @@ export class SyncRecord {
 const ADMIN_SALT = 'planner.admin.v2';
 const ADMIN_ITER = 210000;
 /* Override in production with:  npx wrangler secret put ADMIN_SHA           */
-const ADMIN_SHA = '57149eec9148465eadd3beee02ffa5168244dc1ebe0cd84716914ba24e1fdcd6';
+const ADMIN_SHA = 'f838156933082fc0ca39aba7dc2c99cb2e0e1ccb34bf62d27ff442149dc52f8b';
 
 const DAY_KEEP = 60;            // per-device day markers older than this are pruned
 const HIT_WINDOW = 60_000;
