@@ -355,7 +355,9 @@ or next-up block is actually on screen.
 The library holds 66 block types across the plan's seven categories (see
 `BLOCKS` — each entry carries `n/c/d/sm` where `sm` is its signature
 behavior). New synced kinds back some of them: `grades`, `links`, `moods`,
-`photos`, `recurs`. A local-only stats layer (`planner.stats.v1`) learns
+`photos`, `recurs` (repeat rules: school days, daily, weekdays, chosen
+weekdays, every two weeks or monthly, with an optional time and end date —
+only the next occurrence is ever real homework). A local-only stats layer (`planner.stats.v1`) learns
 per-class homework pace, on-time rates, finish-days and focus days for the
 estimate/meter/streak/completion blocks. Per-device preferences live in
 `planner.prefs.v1` (theme incl. auto, week start, 12/24 h, default due,

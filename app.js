@@ -719,13 +719,14 @@ function estimateHTML() {
 function recurHTML() {
   const rows = db.recurs.map(r => `<div class="row">
     <span class="swatch" style="background:${classColor(r.classId)}"></span>
-    <span class="row-main"><span class="row-title">${esc(r.title)}</span>
-      <span class="row-sub">${esc(className(r.classId))} · every school day</span></span>
+    <button class="row-main" data-act="recur-edit" data-id="${r.id}"><span class="row-title">${esc(r.title)}</span>
+      <span class="row-sub">${esc(className(r.classId))} · ${esc(repeatLabel(r))}</span></button>
     <button class="blk-x" data-act="recur-del" data-id="${r.id}" aria-label="Stop repeating">
       <svg viewBox="0 0 24 24"><path d="M6 6l12 12M18 6L6 18"/></svg></button></div>`).join('');
   return `<section class="panel"><div class="panel-head"><h2>Repeats</h2>
       <button class="link-btn" data-act="recur-add">Add</button></div>
-    ${rows || `<p class="empty">Standing work — “read 20 min” — recreated each school day, never on breaks.</p>`}</section>`;
+    ${rows || `<p class="empty">Standing work — “read 20 min” every school day, a quiz every Friday, a log due on the 1st.
+      Only the next one is ever on your list.</p>`}</section>`;
 }
 
 /* -- calendar -- */
@@ -1230,7 +1231,7 @@ const BLOCKS = {
     sm: 'The assignment completes itself when the last step is checked.',
     html: cfg => subtasksHTML(cfg) },
   recur: { n: 'Recurring homework', c: 'work', d: 'Standing work, like nightly reading.',
-    sm: 'Regenerates on school days only — never on weekends or breaks.',
+    sm: 'School days, chosen weekdays, every other week or monthly — and only the next one is ever on your list.',
     html: () => recurHTML() },
   turnin: { n: 'Turn-in reminder', c: 'work', d: 'Don’t forget to actually hand it in.',
     sm: 'Pairs each due item with the period that class meets today.',
@@ -1692,6 +1693,7 @@ function rowHTML({ kind, item }, opts = {}) {
     // row is noise; the same goes for the class name inside a class page
     const parts = opts.hideClass ? [] : [className(item.classId)];
     if (!opts.hideDate) parts.push(relLabel(item.due));
+    if (item.time) parts.push(clockLabel(item.time));
     if (opts.hideClass && item.details) parts.push(item.details);
     const sub = parts.filter(Boolean).join(' · ');
     // `open` also sits on the outer div: the chevron and its padding are
@@ -1785,9 +1787,11 @@ const TASK_GROUPS = [
 function taskGroups() {
   const t = today(), tm = shift(t, 1), wk = shift(t, 7);
   const all = [];
-  for (const h of db.homework) all.push({ kind: 'homework', item: h, due: h.due, done: !!h.done });
-  for (const p of db.projects) all.push({ kind: 'project', item: p, due: p.due, done: statusOf(p).pct === 100 });
+  // a timed item sorts within its day by that time, ahead of untimed ones
+  for (const h of db.homework) all.push({ kind: 'homework', item: h, due: h.due + (h.time || '~'), done: !!h.done });
+  for (const p of db.projects) all.push({ kind: 'project', item: p, due: p.due + '~', done: statusOf(p).pct === 100 });
   all.sort((a, b) => a.due < b.due ? -1 : a.due > b.due ? 1 : 0);
+  for (const x of all) x.due = x.due.slice(0, 10);
 
   const bucket = new Map(TASK_GROUPS.map(([key]) => [key, []]));
   for (const x of all) {
@@ -1817,7 +1821,7 @@ function taskRowHTML(x) {
   const it = x.item, hw = x.kind === 'homework';
   const st = hw ? null : statusOf(it);
   const sub = hw
-    ? [className(it.classId), it.details].filter(Boolean).join(' · ')
+    ? [className(it.classId), it.time && clockLabel(it.time), it.details].filter(Boolean).join(' · ')
     : `Project · ${st.label}`;
   const mark = hw
     ? `<button class="check" data-act="toggle" data-id="${it.id}" aria-pressed="${!!it.done}"
@@ -2190,8 +2194,13 @@ function formHTML(type, v = {}) {
       <input id="f-title" type="text" data-autofocus value="${esc(v.title)}" placeholder="Worksheet 3"
         autocapitalize="sentences" enterkeyhint="done"></div>
     ${classField(v.classId)}
-    <div class="field"><label for="f-due">Due</label>
-      <input id="f-due" type="date" value="${esc(v.due || defaultDue(prefs.due))}"></div>
+    <div class="field-row">
+      <div class="field"><label for="f-due">Due</label>
+        <input id="f-due" type="date" value="${esc(v.due || defaultDue(prefs.due))}"></div>
+      <div class="field"><label for="f-time">Time <span class="opt">(optional)</span></label>
+        <input id="f-time" type="time" value="${esc(v.time || '')}"></div>
+    </div>
+    ${v.id ? '' : repeatFields({}, { never: true })}
     <div class="field"><label for="f-details">Details <span class="opt">(optional)</span></label>
       <textarea id="f-details" rows="2" placeholder="Pages 40–42" autocapitalize="sentences">${esc(v.details)}</textarea></div>`;
 
@@ -2344,7 +2353,13 @@ function submitForm() {
     if (!title) return flash('#r-title');
     const classId = resolveClass();
     if (!classId) return flash('#f-newclass');
-    db.recurs.push(touch({ id: uid(), title, classId }));
+    const start = val('#r-start') || today();
+    const rep = readRepeat(start);
+    if (rep.end && rep.end < start) return flash('#r-end');
+    const data = { title, classId, start, time: val('#f-time'), ...rep };
+    const r = ctx.id && byId(db.recurs, ctx.id);
+    if (r) { touch(Object.assign(r, data)); refreshRepeat(r); }
+    else db.recurs.push(touch({ id: uid(), ...data }));
     ensureRecur();
     return commit();
   }
@@ -2383,8 +2398,16 @@ function submitForm() {
     if (!title) return flash('#f-title');
     const classId = resolveClass();
     if (!classId) return flash('#f-newclass');
-    const data = { title, classId, due: val('#f-due') || shift(today(), 1), details: val('#f-details') };
-    if (editing) touch(Object.assign(byId(db.homework, ctx.id), data));
+    const data = { title, classId, due: val('#f-due') || shift(today(), 1), time: val('#f-time'),
+      details: val('#f-details') };
+    // a repeat starts on the chosen due date; ensureRecur makes its first copy
+    const rep = editing ? null : readRepeat(data.due);
+    if (rep && rep.end && rep.end < data.due) return flash('#r-end');
+    if (rep) {
+      const { due: start, ...rest } = data;
+      db.recurs.push(touch({ id: uid(), ...rest, start, ...rep }));
+      ensureRecur();
+    } else if (editing) touch(Object.assign(byId(db.homework, ctx.id), data));
     else db.homework.push(touch({ id: uid(), done: false, createdAt: stamp(), ...data }));
 
   } else if (ctx.type === 'note') {
@@ -3413,21 +3436,145 @@ function estimateTonight() {
 
 const fmtDur = m => m >= 60 ? `${Math.floor(m / 60)} h ${m % 60 ? (m % 60) + ' m' : ''}`.trim() : `${m} min`;
 
-/* Standing homework regenerates itself on school days only — weekends and
-   anything the bell calendar knows about are skipped automatically. */
+/* ---------------- repeats ----------------
+   A repeat is a rule, never a pre-built list of copies: only the next
+   occurrence exists as real homework at any moment, so a daily task cannot
+   bury the task list in a month of copies, and changing the rule changes
+   everything still to come. Records from before rules existed carry no
+   `freq` and keep meaning "every school day". */
+
+const REPEATS = [
+  ['school', 'Every school day'],
+  ['daily', 'Every day'],
+  ['weekdays', 'Every weekday (Mon–Fri)'],
+  ['weekly', 'Weekly, on chosen days'],
+  ['biweekly', 'Every 2 weeks'],
+  ['monthly', 'Monthly, same date']
+];
+
+const monthLength = s => { const d = parseISO(s); return new Date(d.getFullYear(), d.getMonth() + 1, 0).getDate(); };
+const ordinal = n => { const s = ['th', 'st', 'nd', 'rd'], v = n % 100; return n + (s[(v - 20) % 10] || s[v] || s[0]); };
+const repeatDays = r => (r.days?.length ? r.days : [weekdayOf(r.start || today())]);
+
+function repeatsOn(r, d) {
+  if (r.start && d < r.start) return false;
+  if (r.end && d > r.end) return false;
+  const s = r.start || d;
+  switch (r.freq || 'school') {
+    case 'daily': return true;
+    case 'weekdays': { const wd = weekdayOf(d); return wd >= 1 && wd <= 5; }
+    case 'weekly': return repeatDays(r).includes(weekdayOf(d));
+    case 'biweekly': return daysBetween(s, d) % 14 === 0;
+    // the 31st lands on the last day of shorter months rather than skipping them
+    case 'monthly': return +d.slice(8) === Math.min(+s.slice(8), monthLength(d));
+    default: return !!planForDate(d);          // breaks and weekends drop out on their own
+  }
+}
+
+/** The first day on or after `from` that the rule lands on; null once it has ended. */
+function nextRepeat(r, from = today()) {
+  let d = r.start && r.start > from ? r.start : from;
+  for (let i = 0; i < 400; i++, d = shift(d, 1)) {
+    if (r.end && d > r.end) return null;
+    if (repeatsOn(r, d)) return d;
+  }
+  return null;
+}
+
+/** "every Mon, Wed · 8:00 AM · until Dec 19" */
+function repeatLabel(r) {
+  const f = r.freq || 'school';
+  const order = d => prefs.mon ? (d + 6) % 7 : d;
+  let s = f === 'weekly' ? 'every ' + [...repeatDays(r)].sort((a, b) => order(a) - order(b)).map(d => DAY_NAMES[d]).join(', ')
+    : f === 'biweekly' ? `every other ${DAY_NAMES[weekdayOf(r.start)]}`
+    : f === 'monthly' ? `monthly on the ${ordinal(+r.start.slice(8))}`
+    : { daily: 'every day', weekdays: 'every weekday' }[f] || 'every school day';
+  if (r.time) s += ' · ' + clockLabel(r.time);
+  if (r.start && r.start > today()) s += ' · starts ' + dateLabel(r.start);
+  if (r.end) s += r.end < today() ? ' · ended' : ' · until ' + dateLabel(r.end);
+  return s;
+}
+
+/* The next occurrence of every rule exists as real homework. Its id is fixed
+   by rule and date, so running this again (or on another device) never makes
+   a duplicate, and one you deleted stays deleted. */
 function ensureRecur() {
   const t = today();
-  if (!planForDate(t)) return false;
   let made = false;
   for (const r of db.recurs) {
-    const id = `r${r.id}:${t}`;
+    const due = nextRepeat(r, t);
+    if (!due) continue;
+    const id = `r${r.id}:${due}`;
     if (byId(db.homework, id) || db.deleted[id]) continue;
-    db.homework.push(touch({ id, title: r.title, classId: r.classId, due: t,
-      details: '', done: false, createdAt: stamp() }));
+    db.homework.push(touch({ id, title: r.title, classId: r.classId, due, time: r.time || '',
+      details: r.details || '', done: false, createdAt: stamp() }));
     made = true;
   }
   if (made) save();
   return made;
+}
+
+/** After a rule is edited, its unfinished upcoming copy follows the new rule. */
+function refreshRepeat(r) {
+  const prefix = `r${r.id}:`, t = today();
+  for (const h of [...db.homework]) {
+    if (!h.id.startsWith(prefix) || h.done || h.due < t) continue;
+    if (repeatsOn(r, h.due)) {
+      touch(Object.assign(h, { title: r.title, classId: r.classId, time: r.time || '' }));
+    } else {
+      tombstone(h.id);
+      db.homework = db.homework.filter(x => x.id !== h.id);
+    }
+  }
+}
+
+/** The repeat controls, shared by the homework sheet and the Repeats block. */
+function repeatFields(r = {}, { never = false } = {}) {
+  const freq = r.freq || (never ? '' : 'school');
+  // a new rule picks its weekday when Weekly is chosen (see the change
+  // listener), from whatever date is set by then
+  const days = r.freq === 'weekly' ? repeatDays(r) : [];
+  const opts = (never ? '<option value="">Never</option>' : '') + REPEATS.map(([k, l]) =>
+    `<option value="${k}"${k === freq ? ' selected' : ''}>${l}</option>`).join('');
+  return `<div class="field"><label for="r-freq">Repeat</label><select id="r-freq">${opts}</select></div>
+    <div class="field" id="r-days-f"${freq === 'weekly' ? '' : ' hidden'}><label>On</label>
+      <div class="segmented r-days">${DAY_NAMES.map((n, i) => `<button type="button" data-act="r-day" data-d="${i}"
+        aria-label="${n}" aria-pressed="${days.includes(i)}"${days.includes(i) ? ' class="is-active"' : ''}>${n.slice(0, 2)}</button>`).join('')}</div></div>
+    <div class="field" id="r-end-f"${freq ? '' : ' hidden'}><label for="r-end">Ends <span class="opt">(optional)</span></label>
+      <input id="r-end" type="date" value="${esc(r.end || '')}"></div>`;
+}
+
+/** What the repeat controls say, or null when set to Never. */
+function readRepeat(start) {
+  const freq = val('#r-freq');
+  if (!freq) return null;
+  let days = [...sheet.querySelectorAll('.r-days .is-active')].map(b => +b.dataset.d);
+  if (freq !== 'weekly') days = [];
+  else if (!days.length) days = [weekdayOf(start)];
+  return { freq, days, end: val('#r-end') };
+}
+
+function openRecurSheet(id) {
+  const r = id ? byId(db.recurs, id) : null;
+  const start = r?.start || today();
+  openSheet(`
+    <div class="sheet-head"><h2 id="sheetTitle">${r ? 'Repeating task' : 'New repeating task'}</h2>
+      <button class="link-btn" data-act="close" type="button">Cancel</button></div>
+    <form id="form" novalidate>
+      <div class="field"><label for="r-title">Title</label>
+        <input id="r-title" type="text" data-autofocus value="${esc(r?.title)}" placeholder="Read 20 minutes"
+          autocapitalize="sentences" enterkeyhint="done"></div>
+      ${classField(r ? r.classId : guessClass())}
+      <div class="field-row">
+        <div class="field"><label for="r-start">Starts</label>
+          <input id="r-start" type="date" value="${esc(start)}"></div>
+        <div class="field"><label for="f-time">Due at <span class="opt">(optional)</span></label>
+          <input id="f-time" type="time" value="${esc(r?.time || '')}"></div>
+      </div>
+      ${repeatFields(r || {})}
+      <button class="btn" type="submit">${r ? 'Save' : 'Start repeating'}</button>
+      ${r ? '<button class="btn is-ghost" type="button" data-act="recur-del">Stop repeating</button>' : ''}
+    </form>`, { mode: 'recur', id: id || null, autofocus: !r });
 }
 
 /* ---------------- settings ---------------- */
@@ -4475,24 +4622,26 @@ document.addEventListener('click', e => {
       commit();
       break;
 
-    case 'recur-add':
-      openSheet(`
-        <div class="sheet-head"><h2 id="sheetTitle">Repeats every school day</h2>
-          <button class="link-btn" data-act="close" type="button">Cancel</button></div>
-        <form id="form" novalidate>
-          <div class="field"><label for="r-title">Title</label>
-            <input id="r-title" type="text" data-autofocus placeholder="Read 20 minutes"></div>
-          ${classField(guessClass())}
-          <button class="btn" type="submit">Start repeating</button>
-        </form>`, { mode: 'recur' });
-      break;
+    case 'recur-add': openRecurSheet(null); break;
+    case 'recur-edit': openRecurSheet(el.dataset.id); break;
 
-    case 'recur-del':
-      tombstone(el.dataset.id);
-      db.recurs = db.recurs.filter(r => r.id !== el.dataset.id);
-      save();
-      render();
+    case 'r-day': {
+      const on = !el.classList.contains('is-active');
+      el.classList.toggle('is-active', on);
+      el.setAttribute('aria-pressed', on);
       break;
+    }
+
+    // from the row's ✕ or from inside its sheet; work already on the list stays
+    case 'recur-del': {
+      const id = el.dataset.id || ctx?.id;
+      if (!id) break;
+      tombstone(id);
+      db.recurs = db.recurs.filter(r => r.id !== id);
+      if (ctx?.mode === 'recur') commit();
+      else { save(); render(); }
+      break;
+    }
 
     case 'photo-add': q('#photoIn')?.click(); break;
 
@@ -4681,6 +4830,20 @@ sheet.addEventListener('change', e => {
   if (nm) {
     const pg = pageById(nm.dataset.pg);
     if (pg && nm.value.trim()) { pg.name = nm.value.trim(); saveLayout(); renderTabs(); }
+    return;
+  }
+  if (e.target.id === 'r-freq') {
+    const f = e.target.value;
+    sheet.querySelector('#r-days-f').hidden = f !== 'weekly';
+    sheet.querySelector('#r-end-f').hidden = !f;
+    // weekly opens on the weekday of the date already picked, not the one
+    // that happened to be due when the sheet was drawn
+    const from = sheet.querySelector('#r-start, #f-due')?.value;
+    if (f === 'weekly' && from && !sheet.querySelector('.r-days .is-active')) {
+      const b = sheet.querySelector(`.r-days [data-d="${weekdayOf(from)}"]`);
+      b?.classList.add('is-active');
+      b?.setAttribute('aria-pressed', 'true');
+    }
     return;
   }
   if (e.target.id !== 'f-class') return;

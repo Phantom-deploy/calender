@@ -14,9 +14,14 @@ Current as of November 2026, commit `910423d`.
 
 Three things will bite you before anything else.
 
-### There are no tests
+### There are almost no tests
 
-**The repo has never contained a test.** `git ls-files` confirms it.
+**The repo has almost no tests.** The one exception is `tests/recur.mjs`, a
+Playwright script for repeating tasks. Serve the app with `python3 -m
+http.server 8080`, make `playwright` importable from the repo (for example
+`npm i --no-save playwright`; `node_modules/` is ignored), then run
+`node tests/recur.mjs <notebook|default> <light|dark>`. It prints one `ok`
+or `FAIL` line per check and exits non-zero on any failure.
 
 A Playwright suite did exist — 20 files, roughly 300 assertions, covering
 onboarding, the block organizer, both visual styles, bell schedules, rotation,
@@ -35,7 +40,7 @@ from nothing.
 
 `sw.js` caches the shell cache-first. If you change `app.js`, `app.css`,
 `index.html` or `bell.js` and do **not** bump `CACHE`, returning users keep the
-old files indefinitely. Currently `planner-v33`.
+old files indefinitely. Currently `planner-v34`.
 
 This is the easiest way to ship a change that appears to do nothing at all.
 
@@ -186,7 +191,7 @@ Every record has `id` (string) and `updatedAt` (number, set only via `touch()`).
 | List | Fields |
 | --- | --- |
 | `classes` | `id, name, color, h?` — `h: 1` is honors/AP, weights GPA |
-| `homework` | `id, title, classId, due (YYYY-MM-DD), details, done, createdAt, completedAt?` |
+| `homework` | `id, title, classId, due (YYYY-MM-DD), time? (HH:MM), details, done, createdAt, completedAt?` |
 | `notes` | `id, text, classId, date` |
 | `projects` | `id, name, due, status ('todo'\|'doing'\|'done'), description` |
 | `events` | `id, title, classId, date, details` — `classId` may be `''` |
@@ -197,7 +202,7 @@ Every record has `id` (string) and `updatedAt` (number, set only via `touch()`).
 | `links` | `id, label, url, classId` |
 | `moods` | `id: <date>`, `v` |
 | `photos` | `id, classId, date, img` (data URL, capped at 12) |
-| `recurs` | `id, title, classId` |
+| `recurs` | `id, title, classId, freq?, days?, start?, time?, end?, details?` — a rule; no `freq` means every school day |
 
 Deterministic ids (`p3`, a date, `session`) exist so the record is *replaced*
 rather than duplicated — that is what makes them survive a merge cleanly.
@@ -225,17 +230,29 @@ rather than duplicated — that is what makes them survive a merge cleanly.
 
 ### Idempotent generation
 
-`ensureRecur()` (`app.js:3418`) is the pattern for anything that regenerates
+`ensureRecur()` (`app.js:3501`) is the pattern for anything that regenerates
 records:
 
 ```js
-const id = `r${r.id}:${t}`;
+const id = `r${r.id}:${due}`;     // due = nextRepeat(r, today())
 if (byId(db.homework, id) || db.deleted[id]) continue;
 ```
 
 A deterministic id means re-running creates no duplicates; the `db.deleted[id]`
 check means an item the user deleted stays deleted. Any future importer should
 copy this shape exactly.
+
+A repeat is a rule, not a list of copies. `freq` is one of `school` (the
+default, and what records from before rules existed mean), `daily`,
+`weekdays`, `weekly` (on `days`, 0 = Sunday), `biweekly` (every 14 days from
+`start`) or `monthly` (the date of `start`, clamped to short months).
+`repeatsOn(r, date)` answers whether a rule lands on a day and `nextRepeat()`
+finds the next one. **Only the next occurrence ever exists as homework**, so a
+daily rule cannot flood the list; occurrences on days the app was not opened
+are simply never made. Editing a rule runs `refreshRepeat()`, which renames its
+unfinished upcoming copy or tombstones it if the new rule no longer lands
+there. Rules can be made from the Repeats block or from the ordinary New
+homework sheet, whose Repeat select defaults to Never.
 
 ---
 
@@ -436,7 +453,7 @@ meaningless. Failure is silent by design.
 ## 15. Release checklist
 
 1. `node --check app.js` (and `sw.js`, `bell.js` if touched).
-2. **Bump `CACHE` in `sw.js`.** Currently `planner-v33`.
+2. **Bump `CACHE` in `sw.js`.** Currently `planner-v34`.
 3. Check the gzipped size has not jumped: `gzip -c app.js | wc -c` — about 75 KB
    today, and that figure matters on a phone.
 4. Exercise the change in **both styles and in dark mode.** A rule written for
